@@ -1,5 +1,8 @@
 package utnfc.isi.back.tpi.common.error;
 
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.exc.InvalidFormatException;
+import com.fasterxml.jackson.databind.exc.MismatchedInputException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,7 +27,9 @@ import utnfc.isi.back.tpi.common.exception.RecursoNoEncontradoException;
 import utnfc.isi.back.tpi.common.exception.ServicioNoDisponibleException;
 import utnfc.isi.back.tpi.common.exception.SolicitudInvalidaException;
 
+import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Manejador global de excepciones, compartido por los tres servicios.
@@ -105,13 +110,60 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ErrorResponse> handleCuerpoIlegible(HttpMessageNotReadableException ex, HttpServletRequest req) {
+        List<ErrorResponse.CampoError> campos = extraerErroresDeLectura(ex);
+        if (!campos.isEmpty()) {
+            log.warn("Valor invalido al leer JSON en {}: {}", req.getRequestURI(), campos.get(0).campo());
+            return build(HttpStatus.BAD_REQUEST, "Hay datos invalidos en la solicitud", req, campos);
+        }
         log.warn("Cuerpo ilegible en {}", req.getRequestURI());
         return build(HttpStatus.BAD_REQUEST, "El cuerpo de la solicitud no es un JSON valido o tiene valores no permitidos", req, List.of());
     }
 
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ErrorResponse> handleTipoIncorrecto(MethodArgumentTypeMismatchException ex, HttpServletRequest req) {
-        return build(HttpStatus.BAD_REQUEST, "El parametro '" + ex.getName() + "' tiene un valor invalido", req, List.of());
+        Class<?> requerido = ex.getRequiredType();
+        String mensaje = (requerido != null && requerido.isEnum())
+                ? "valor invalido; valores permitidos: " + valoresPermitidos(requerido)
+                : "valor invalido";
+        return build(HttpStatus.BAD_REQUEST, "El parametro '" + ex.getName() + "' tiene un valor invalido", req,
+                List.of(new ErrorResponse.CampoError(ex.getName(), mensaje)));
+    }
+
+    private static List<ErrorResponse.CampoError> extraerErroresDeLectura(Throwable ex) {
+        for (Throwable t = ex; t != null; t = (t.getCause() == t ? null : t.getCause())) {
+            if (t instanceof MismatchedInputException mie) {
+                String campo = construirRuta(mie.getPath());
+                if (!campo.isEmpty()) {
+                    String mensaje = (t instanceof InvalidFormatException ife
+                            && ife.getTargetType() != null && ife.getTargetType().isEnum())
+                            ? "valor invalido; valores permitidos: " + valoresPermitidos(ife.getTargetType())
+                            : "tiene un tipo o formato invalido";
+                    return List.of(new ErrorResponse.CampoError(campo, mensaje));
+                }
+            }
+        }
+        return List.of();
+    }
+
+    private static String construirRuta(List<JsonMappingException.Reference> path) {
+        StringBuilder sb = new StringBuilder();
+        for (JsonMappingException.Reference ref : path) {
+            if (ref.getFieldName() != null) {
+                if (!sb.isEmpty()) {
+                    sb.append('.');
+                }
+                sb.append(ref.getFieldName());
+            } else if (ref.getIndex() >= 0) {
+                sb.append('[').append(ref.getIndex()).append(']');
+            }
+        }
+        return sb.toString();
+    }
+
+    private static String valoresPermitidos(Class<?> enumType) {
+        return Arrays.stream(enumType.getEnumConstants())
+                .map(Object::toString)
+                .collect(Collectors.joining(", "));
     }
 
     @ExceptionHandler(MissingServletRequestParameterException.class)

@@ -10,6 +10,7 @@ import org.springframework.security.oauth2.server.resource.authentication.Reacti
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.security.web.server.ServerAuthenticationEntryPoint;
 import org.springframework.security.web.server.authorization.ServerAccessDeniedHandler;
+import org.springframework.security.web.server.context.NoOpServerSecurityContextRepository;
 import utnfc.isi.back.tpi.gateway.error.JsonErrorWriter;
 
 /**
@@ -29,20 +30,23 @@ import utnfc.isi.back.tpi.gateway.error.JsonErrorWriter;
 public class SecurityConfig {
 
     @Bean
-    SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
+    SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http, JsonErrorWriter errorWriter) {
         JwtAuthenticationConverter jwtConverter = new JwtAuthenticationConverter();
         jwtConverter.setJwtGrantedAuthoritiesConverter(new KeycloakRealmRolesConverter());
         jwtConverter.setPrincipalClaimName("sub");
 
-        ServerAuthenticationEntryPoint entryPoint = (exchange, ex) -> JsonErrorWriter.escribir(exchange,
-                HttpStatus.UNAUTHORIZED, "No autenticado", "Falta el token o es invalido");
-        ServerAccessDeniedHandler accessDenied = (exchange, ex) -> JsonErrorWriter.escribir(exchange,
-                HttpStatus.FORBIDDEN, "Prohibido", "No tiene permisos para realizar esta operacion");
+        ServerAuthenticationEntryPoint entryPoint = (exchange, ex) -> errorWriter.escribir(exchange,
+                HttpStatus.UNAUTHORIZED, JsonErrorWriter.descripcion(HttpStatus.UNAUTHORIZED),
+                "Falta el token o es invalido");
+        ServerAccessDeniedHandler accessDenied = (exchange, ex) -> errorWriter.escribir(exchange,
+                HttpStatus.FORBIDDEN, JsonErrorWriter.descripcion(HttpStatus.FORBIDDEN),
+                "No tiene permisos para realizar esta operacion");
 
         return http
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .httpBasic(ServerHttpSecurity.HttpBasicSpec::disable)
                 .formLogin(ServerHttpSecurity.FormLoginSpec::disable)
+                .securityContextRepository(NoOpServerSecurityContextRepository.getInstance())
                 .authorizeExchange(ex -> ex
                         .pathMatchers("/actuator/health/**", "/actuator/info").permitAll()
                         .pathMatchers("/api/**").hasAnyRole("ADOPTANTE", "COORDINADOR")

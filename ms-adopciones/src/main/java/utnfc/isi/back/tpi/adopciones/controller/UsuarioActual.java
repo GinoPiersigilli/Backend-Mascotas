@@ -11,8 +11,6 @@ final class UsuarioActual {
     }
 
     static Usuario de(JwtAuthenticationToken auth) {
-        boolean coordinador = auth.getAuthorities().stream()
-                .anyMatch(a -> a.getAuthority().equals("ROLE_" + Roles.COORDINADOR));
-        return new Usuario(auth.getToken().getSubject(), coordinador);
+        return new Usuario(auth.getToken().getSubject(), Roles.tieneRol(auth, Roles.COORDINADOR));
     }
 }

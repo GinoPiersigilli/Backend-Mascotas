@@ -192,7 +192,9 @@ class FlujoAdopcionIntegrationTest {
         mvc.perform(get("/api/solicitudes/" + id + "/historial").with(adoptante("ana")))
                 .andExpect(jsonPath("$.length()").value(4))
                 .andExpect(jsonPath("$[1].actor").value("coord-1"))
-                .andExpect(jsonPath("$[3].estadoNuevo").value("FINALIZADA"));
+                .andExpect(jsonPath("$[1].detalle").value("Solicitud aprobada"))
+                .andExpect(jsonPath("$[3].estadoNuevo").value("FINALIZADA"))
+                .andExpect(jsonPath("$[3].detalle").value(org.hamcrest.Matchers.containsString("Se adapto muy bien")));
     }
 
     @Test

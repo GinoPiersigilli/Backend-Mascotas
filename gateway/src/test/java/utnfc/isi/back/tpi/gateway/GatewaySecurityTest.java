@@ -40,7 +40,10 @@ class GatewaySecurityTest {
     void sinTokenDevuelve401ConFormatoUnico() {
         client.get().uri("/api/animales").exchange()
                 .expectStatus().isUnauthorized()
-                .expectBody().jsonPath("$.status").isEqualTo(401).jsonPath("$.path").isEqualTo("/api/animales");
+                .expectHeader().exists("X-Correlation-ID")
+                .expectBody().jsonPath("$.status").isEqualTo(401)
+                .jsonPath("$.error").isEqualTo("No autenticado")
+                .jsonPath("$.path").isEqualTo("/api/animales");
     }
 
     @Test
@@ -50,7 +53,9 @@ class GatewaySecurityTest {
 
     @Test
     void laApiInternaNoSePublica() {
-        con("COORDINADOR").put().uri("/internal/animales/1/estado").exchange().expectStatus().isForbidden();
+        con("COORDINADOR").put().uri("/internal/animales/1/estado").exchange()
+                .expectStatus().isForbidden()
+                .expectHeader().exists("X-Correlation-ID");
     }
 
     @Test
@@ -71,6 +76,8 @@ class GatewaySecurityTest {
     void rutaInexistenteDevuelve404() {
         con("ADOPTANTE").get().uri("/api/inexistente").exchange()
                 .expectStatus().isNotFound()
-                .expectBody().jsonPath("$.status").isEqualTo(404);
+                .expectHeader().exists("X-Correlation-ID")
+                .expectBody().jsonPath("$.status").isEqualTo(404)
+                .jsonPath("$.error").isEqualTo("No encontrado");
     }
 }

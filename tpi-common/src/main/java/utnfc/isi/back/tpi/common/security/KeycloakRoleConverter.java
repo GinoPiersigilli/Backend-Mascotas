@@ -45,7 +45,7 @@ public class KeycloakRoleConverter implements Converter<Jwt, AbstractAuthenticat
         return lista.stream()
                 .filter(String.class::isInstance)
                 .map(String.class::cast)
-                .map(rol -> (GrantedAuthority) new SimpleGrantedAuthority("ROLE_" + rol.toUpperCase(Locale.ROOT)))
+                .map(rol -> (GrantedAuthority) new SimpleGrantedAuthority(Roles.PREFIJO + rol.toUpperCase(Locale.ROOT)))
                 .toList();
     }
 }

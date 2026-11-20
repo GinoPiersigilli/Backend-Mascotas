@@ -11,7 +11,7 @@ System(sistema, "Sistema de Adopción Responsable", "Backend que ordena el ciclo
 
 System_Ext(keycloak, "Keycloak", "Identity Provider. Autentica usuarios (OIDC), emite tokens JWT y administra los roles ADOPTANTE, COORDINADOR y SERVICIO.")
 System_Ext(georef, "API Georef (Datos Argentina)", "API pública del Estado argentino. Normaliza direcciones y devuelve sus coordenadas geográficas.")
-System_Ext(mercadopago, "Mercado Pago", "Plataforma de pagos. Crea los cobros de las donaciones y informa si fueron acreditados.")
+System_Ext(mercadopago, "Mercado Pago", "Plataforma de pagos. Crea los cobros de las donaciones e informa si fueron acreditados.")
 
 Rel(adoptante, sistema, "Completa su perfil, solicita adopciones, dona y consulta su estado", "HTTPS / REST JSON")
 Rel(coordinador, sistema, "Gestiona animales, evalúa solicitudes, confirma entregas, registra controles y consulta donaciones", "HTTPS / REST JSON")

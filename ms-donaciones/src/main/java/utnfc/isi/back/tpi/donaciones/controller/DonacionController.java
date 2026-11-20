@@ -65,6 +65,6 @@ public class DonacionController {
     }
 
     private static boolean esCoordinador(JwtAuthenticationToken auth) {
-        return auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_" + Roles.COORDINADOR));
+        return Roles.tieneRol(auth, Roles.COORDINADOR);
     }
 }

@@ -10,6 +10,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import utnfc.isi.back.tpi.common.exception.ConflictoException;
+import utnfc.isi.back.tpi.common.exception.SolicitudInvalidaException;
 
 import java.time.LocalDateTime;
 
@@ -88,11 +89,12 @@ public class Animal {
     public void actualizarDatos(String nombre, Especie especie, int edadMeses, Tamanio tamanio,
                                 String necesidadesEspeciales, boolean aptoNinios, boolean aptoOtrosAnimales,
                                 boolean requiereEspacioExterior) {
-        this.nombre = nombre;
+        this.nombre = nombre == null ? null : nombre.trim();
         this.especie = especie;
         this.edadMeses = edadMeses;
         this.tamanio = tamanio;
-        this.necesidadesEspeciales = necesidadesEspeciales;
+        this.necesidadesEspeciales = (necesidadesEspeciales == null || necesidadesEspeciales.isBlank())
+                ? null : necesidadesEspeciales.trim();
         this.aptoNinios = aptoNinios;
         this.aptoOtrosAnimales = aptoOtrosAnimales;
         this.requiereEspacioExterior = requiereEspacioExterior;
@@ -117,6 +119,9 @@ public class Animal {
      * NO_DISPONIBLE sin resolver antes ese proceso. Un animal ADOPTADO ya salio del refugio.
      */
     public void marcarNoDisponible(String motivo) {
+        if (motivo == null || motivo.isBlank()) {
+            throw new SolicitudInvalidaException("Marcar un animal como no disponible requiere un motivo");
+        }
         if (estado.tieneAdopcionEnCurso()) {
             throw new ConflictoException("El animal " + id + " tiene una adopcion en curso (" + estado
                     + "); primero hay que resolverla (R-13)");
@@ -125,7 +130,7 @@ public class Animal {
             throw new ConflictoException("Solo un animal DISPONIBLE puede pasar a NO_DISPONIBLE; estado actual: " + estado);
         }
         this.estado = EstadoAnimal.NO_DISPONIBLE;
-        this.motivoNoDisponible = motivo;
+        this.motivoNoDisponible = motivo.trim();
         this.fechaActualizacion = LocalDateTime.now();
     }
 

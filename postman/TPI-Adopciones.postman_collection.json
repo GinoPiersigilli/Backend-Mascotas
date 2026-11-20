@@ -227,7 +227,8 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 401\", () => pm.response.to.have.status(401));",
-                  "pm.test(\"formato unico de error\", () => pm.expect(pm.response.json()).to.have.keys(\"timestamp\",\"status\",\"error\",\"message\",\"path\",\"errores\"));"
+                  "pm.test(\"formato unico de error\", () => pm.expect(pm.response.json()).to.have.keys(\"timestamp\",\"status\",\"error\",\"message\",\"path\",\"errores\"));",
+                  "pm.test(\"incluye X-Correlation-ID\", () => pm.response.to.have.header(\"X-Correlation-ID\"));"
                 ]
               }
             }
@@ -547,7 +548,8 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));"
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"indica el campo invalido\", () => pm.expect(pm.response.json().errores.length).to.be.above(0));"
                 ]
               }
             }
@@ -1255,7 +1257,8 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
-                  "pm.test(\"4 eventos\", () => pm.expect(pm.response.json().length).to.eql(4));"
+                  "pm.test(\"4 eventos\", () => pm.expect(pm.response.json().length).to.eql(4));",
+                  "pm.test(\"cada evento tiene fecha, actor y detalle\", () => pm.response.json().forEach(e => { pm.expect(e.fecha).to.be.a(\"string\").and.not.empty; pm.expect(e.actor).to.be.a(\"string\").and.not.empty; pm.expect(e.detalle).to.be.a(\"string\").and.not.empty; }));"
                 ]
               }
             }
@@ -1393,7 +1396,8 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));"
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"indica el campo invalido\", () => pm.expect(pm.response.json().errores.length).to.be.above(0));"
                 ]
               }
             }

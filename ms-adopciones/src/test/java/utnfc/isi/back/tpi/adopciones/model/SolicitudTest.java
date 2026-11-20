@@ -2,6 +2,7 @@ package utnfc.isi.back.tpi.adopciones.model;
 
 import org.junit.jupiter.api.Test;
 import utnfc.isi.back.tpi.common.exception.ConflictoException;
+import utnfc.isi.back.tpi.common.exception.SolicitudInvalidaException;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -54,6 +55,7 @@ class SolicitudTest {
     @Test
     void r07SoloSeApruebaUnaSolicitudPendiente() {
         Solicitud s = pendiente(false);
+        assertThatThrownBy(() -> s.rechazar("  ", T0, "coord")).isInstanceOf(SolicitudInvalidaException.class);
         s.rechazar("Hogar no adecuado", T0, "coord");
 
         assertThatThrownBy(() -> s.aprobar(null, T0, "coord")).isInstanceOf(ConflictoException.class);
@@ -118,6 +120,8 @@ class SolicitudTest {
     @Test
     void r12ControlDesfavorableRevierte() throws Exception {
         Solicitud s = enAdaptacion();
+        assertThatThrownBy(() -> s.registrarControl(ResultadoControl.DESFAVORABLE, "  ", T0.plusDays(PERIODO + 1), "coord"))
+                .isInstanceOf(SolicitudInvalidaException.class);
         s.registrarControl(ResultadoControl.DESFAVORABLE, "No se adapto", T0.plusDays(PERIODO + 1), "coord");
 
         assertThat(s.getEstado()).isEqualTo(EstadoSolicitud.REVERTIDA);
@@ -145,6 +149,10 @@ class SolicitudTest {
                 EstadoSolicitud.FINALIZADA);
         assertThat(s.getEventos()).extracting(EventoSolicitud::getActor)
                 .containsExactly("ana", "coord", "coord", "coord");
+        assertThat(s.getEventos()).allSatisfy(e -> {
+            assertThat(e.getFecha()).isNotNull();
+            assertThat(e.getDetalle()).isNotBlank();
+        });
     }
 
     private static Solicitud enAdaptacion() {

@@ -35,6 +35,7 @@ public record ErrorResponse(
             case CONFLICT -> "Conflicto";
             case UNSUPPORTED_MEDIA_TYPE -> "Tipo de contenido no soportado";
             case SERVICE_UNAVAILABLE -> "Servicio no disponible";
+            case GATEWAY_TIMEOUT -> "Tiempo de espera agotado";
             case INTERNAL_SERVER_ERROR -> "Error interno";
             default -> status.getReasonPhrase();
         };

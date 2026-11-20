@@ -10,6 +10,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import utnfc.isi.back.tpi.common.exception.ConflictoException;
+import utnfc.isi.back.tpi.common.exception.SolicitudInvalidaException;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -72,6 +73,9 @@ public class Donacion {
 
     public Donacion(String referencia, String donanteId, BigDecimal monto, String preferenciaId, String linkPago,
                     LocalDateTime ahora) {
+        if (monto == null || monto.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new SolicitudInvalidaException("El monto de una donacion debe ser mayor a 0 (D-01)");
+        }
         this.referencia = referencia;
         this.donanteId = donanteId;
         this.monto = monto;
@@ -83,12 +87,22 @@ public class Donacion {
         this.fechaActualizacion = ahora;
     }
 
+    /** D-01: el monto debe cubrir el minimo configurado en la politica de donaciones. */
+    public static void validarMonto(BigDecimal monto, BigDecimal montoMinimo) {
+        if (monto == null || monto.compareTo(montoMinimo) < 0) {
+            throw new SolicitudInvalidaException("El monto minimo de una donacion es " + montoMinimo + " ARS (D-01)");
+        }
+    }
+
     /** D-02: solo pasa a CONFIRMADA con un pago aprobado. D-03: CONFIRMADA no vuelve a cambiar. */
     public void confirmar(String pagoId, LocalDateTime ahora) {
+        if (pagoId == null || pagoId.isBlank()) {
+            throw new SolicitudInvalidaException("El identificador del pago es obligatorio (D-02)");
+        }
         if (estado == EstadoDonacion.CONFIRMADA) {
             throw new ConflictoException("La donacion " + id + " ya esta confirmada (D-03)");
         }
-        this.pagoId = pagoId;
+        this.pagoId = pagoId.trim();
         this.estado = EstadoDonacion.CONFIRMADA;
         this.fechaActualizacion = ahora;
     }

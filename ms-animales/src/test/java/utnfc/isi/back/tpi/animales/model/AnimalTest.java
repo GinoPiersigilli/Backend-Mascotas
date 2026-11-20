@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import utnfc.isi.back.tpi.common.exception.ConflictoException;
+import utnfc.isi.back.tpi.common.exception.SolicitudInvalidaException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -79,6 +80,9 @@ class AnimalTest {
     @Test
     void noDisponibleGuardaMotivoYSeRevierte() {
         Animal a = nuevo();
+        assertThatThrownBy(() -> a.marcarNoDisponible("  ")).isInstanceOf(SolicitudInvalidaException.class);
+        assertThat(a.getEstado()).isEqualTo(EstadoAnimal.DISPONIBLE);
+
         a.marcarNoDisponible("Tratamiento veterinario");
         assertThat(a.getEstado()).isEqualTo(EstadoAnimal.NO_DISPONIBLE);
         assertThat(a.getMotivoNoDisponible()).isEqualTo("Tratamiento veterinario");

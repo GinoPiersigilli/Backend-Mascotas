@@ -9,7 +9,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 import utnfc.isi.back.tpi.common.exception.AccesoDenegadoException;
 import utnfc.isi.back.tpi.common.exception.RecursoNoEncontradoException;
 import utnfc.isi.back.tpi.common.exception.ServicioNoDisponibleException;
-import utnfc.isi.back.tpi.common.exception.SolicitudInvalidaException;
 import utnfc.isi.back.tpi.donaciones.client.MercadoPagoClient;
 import utnfc.isi.back.tpi.donaciones.config.DonacionesProperties;
 import utnfc.isi.back.tpi.donaciones.dto.DonacionDtos.DonacionResponse;
@@ -38,6 +37,7 @@ public class DonacionService {
     private final MercadoPagoClient mercadoPago;
     private final DonacionesProperties props;
     private final TransactionTemplate tx;
+    private final TransactionTemplate txReadOnly;
     private final Clock clock;
 
     public DonacionService(DonacionRepository repository, MercadoPagoClient mercadoPago, DonacionesProperties props,
@@ -46,6 +46,8 @@ public class DonacionService {
         this.mercadoPago = mercadoPago;
         this.props = props;
         this.tx = new TransactionTemplate(transactionManager);
+        this.txReadOnly = new TransactionTemplate(transactionManager);
+        this.txReadOnly.setReadOnly(true);
         this.clock = clock;
     }
 
@@ -54,10 +56,7 @@ public class DonacionService {
      * guardar: no queda ninguna donacion registrada sin enlace de pago.
      */
     public DonacionResponse crear(String donanteId, BigDecimal monto) {
-        if (monto.compareTo(props.montoMinimo()) < 0) {
-            throw new SolicitudInvalidaException("El monto minimo de una donacion es " + props.montoMinimo()
-                    + " ARS (D-01)");
-        }
+        Donacion.validarMonto(monto, props.montoMinimo());
         String referencia = UUID.randomUUID().toString();
         MercadoPagoClient.Cobro cobro = mercadoPago.crearCobro(referencia, monto, props.mercadoPago().tituloItem());
         Donacion donacion = new Donacion(referencia, donanteId, monto, cobro.preferenciaId(), cobro.linkPago(),
@@ -69,7 +68,7 @@ public class DonacionService {
 
     /** D-04: el donante ve las suyas; el Coordinador, todas. No consulta al proveedor. */
     public List<DonacionResponse> listar(String usuario, boolean coordinador) {
-        return tx.execute(st -> (coordinador ? repository.findAllByOrderByIdDesc()
+        return txReadOnly.execute(st -> (coordinador ? repository.findAllByOrderByIdDesc()
                 : repository.findByDonanteIdOrderByIdDesc(usuario))
                 .stream()
                 .map(d -> DonacionResponse.desde(d, d.getEstado() == EstadoDonacion.CONFIRMADA))
@@ -82,7 +81,7 @@ public class DonacionService {
      * verificado = false (se puede volver a consultar mas tarde).
      */
     public DonacionResponse obtener(String usuario, boolean coordinador, Long id) {
-        Donacion donacion = tx.execute(st -> buscar(id));
+        Donacion donacion = txReadOnly.execute(st -> buscar(id));
         if (!coordinador && !donacion.perteneceA(usuario)) {
             throw new AccesoDenegadoException("La donacion " + id + " pertenece a otro donante (D-04)");
         }
@@ -122,7 +121,7 @@ public class DonacionService {
     }
 
     public TotalResponse total() {
-        return tx.execute(st -> new TotalResponse(
+        return txReadOnly.execute(st -> new TotalResponse(
                 repository.sumarMontoPorEstado(EstadoDonacion.CONFIRMADA),
                 repository.countByEstado(EstadoDonacion.CONFIRMADA)));
     }

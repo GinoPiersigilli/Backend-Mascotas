@@ -48,7 +48,9 @@ class GlobalExceptionHandlerTest {
         }
     }
 
-    record Cuerpo(@NotBlank(message = "es obligatorio") String nombre) {
+    enum Categoria { A, B }
+
+    record Cuerpo(@NotBlank(message = "es obligatorio") String nombre, Categoria categoria) {
     }
 
     @BeforeEach
@@ -103,5 +105,11 @@ class GlobalExceptionHandlerTest {
     void jsonInvalidoDevuelve400() throws Exception {
         mvc.perform(post("/validar").contentType(MediaType.APPLICATION_JSON).content("{no es json"))
                 .andExpect(status().isBadRequest());
+
+        mvc.perform(post("/validar").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"nombre\":\"ok\",\"categoria\":\"INVALIDA\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errores[0].campo").value("categoria"))
+                .andExpect(jsonPath("$.errores[0].mensaje").value(org.hamcrest.Matchers.containsString("A, B")));
     }
 }

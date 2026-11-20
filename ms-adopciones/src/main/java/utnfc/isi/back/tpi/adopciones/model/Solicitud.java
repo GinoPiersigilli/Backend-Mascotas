@@ -18,6 +18,7 @@ import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import jakarta.persistence.Version;
 import utnfc.isi.back.tpi.common.exception.ConflictoException;
+import utnfc.isi.back.tpi.common.exception.SolicitudInvalidaException;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -168,16 +169,21 @@ public class Solicitud {
 
     public void aprobar(String justificacion, LocalDateTime ahora, String actor) {
         verificarAprobable(justificacion);
-        this.justificacionExcepcion = (justificacion == null || justificacion.isBlank()) ? null : justificacion;
+        String justificacionLimpia = (justificacion == null || justificacion.isBlank()) ? null : justificacion.trim();
+        this.justificacionExcepcion = justificacionLimpia;
         this.fechaAprobacion = ahora;
-        cambiarEstado(EstadoSolicitud.APROBADA, ahora, actor, justificacionExcepcion);
+        String detalle = justificacionLimpia != null
+                ? "Solicitud aprobada con excepcion: " + justificacionLimpia
+                : "Solicitud aprobada";
+        cambiarEstado(EstadoSolicitud.APROBADA, ahora, actor, detalle);
     }
 
-    /** R-08: todo rechazo requiere motivo (la validacion de que no este vacio la hace el DTO). */
+    /** R-08: todo rechazo requiere motivo. */
     public void rechazar(String motivo, LocalDateTime ahora, String actor) {
+        String motivoLimpio = exigirTexto(motivo, "Rechazar una solicitud requiere un motivo (R-08)");
         exigirEstado(EstadoSolicitud.PENDIENTE, "rechazar");
-        this.motivoRechazo = motivo;
-        cambiarEstado(EstadoSolicitud.RECHAZADA, ahora, actor, motivo);
+        this.motivoRechazo = motivoLimpio;
+        cambiarEstado(EstadoSolicitud.RECHAZADA, ahora, actor, motivoLimpio);
     }
 
     /** El adoptante desiste mientras la solicitud esta pendiente. */
@@ -206,9 +212,10 @@ public class Solicitud {
 
     /** P3: la entrega no se concreta (el adoptante desiste u otra causa). */
     public void cancelarEntrega(String motivo, LocalDateTime ahora, String actor) {
+        String motivoLimpio = exigirTexto(motivo, "Cancelar una entrega requiere un motivo");
         exigirEstado(EstadoSolicitud.APROBADA, "cancelar la entrega de");
-        this.motivoCierre = motivo;
-        cambiarEstado(EstadoSolicitud.CANCELADA, ahora, actor, "Entrega cancelada: " + motivo);
+        this.motivoCierre = motivoLimpio;
+        cambiarEstado(EstadoSolicitud.CANCELADA, ahora, actor, "Entrega cancelada: " + motivoLimpio);
     }
 
     /** R-09: vencio el plazo sin entrega; lo aplica la tarea programada o el intento de confirmar. */
@@ -222,30 +229,48 @@ public class Solicitud {
 
     /** R-11 (conforme) y R-12 (desfavorable). Solo desde la fecha de control. */
     public void registrarControl(ResultadoControl resultado, String observacionesControl, LocalDateTime ahora, String actor) {
+        if (resultado == null) {
+            throw new SolicitudInvalidaException("El resultado del control final es obligatorio");
+        }
+        String obsDesfavorable = resultado == ResultadoControl.DESFAVORABLE
+                ? exigirTexto(observacionesControl, "Un control desfavorable requiere observaciones que expliquen el motivo")
+                : null;
         exigirEstado(EstadoSolicitud.EN_ADAPTACION, "registrar el control final de");
         if (ahora.isBefore(fechaControl)) {
             throw new ConflictoException("El control final de la solicitud " + id + " recien puede registrarse desde "
                     + fechaControl + " (R-11)");
         }
         this.resultadoControl = resultado;
-        this.observacionesControl = observacionesControl;
         if (resultado == ResultadoControl.CONFORME) {
-            cambiarEstado(EstadoSolicitud.FINALIZADA, ahora, actor, "Control final conforme");
+            String obsLimpia = (observacionesControl == null || observacionesControl.isBlank())
+                    ? null : observacionesControl.trim();
+            this.observacionesControl = obsLimpia;
+            String detalle = obsLimpia != null ? "Control final conforme: " + obsLimpia : "Control final conforme";
+            cambiarEstado(EstadoSolicitud.FINALIZADA, ahora, actor, detalle);
         } else {
-            this.motivoCierre = observacionesControl;
-            cambiarEstado(EstadoSolicitud.REVERTIDA, ahora, actor, "Control final desfavorable: " + observacionesControl);
+            this.observacionesControl = obsDesfavorable;
+            this.motivoCierre = obsDesfavorable;
+            cambiarEstado(EstadoSolicitud.REVERTIDA, ahora, actor, "Control final desfavorable: " + obsDesfavorable);
         }
     }
 
     /** R-12: el adoptante devuelve al animal durante el periodo de adaptacion. */
     public void devolver(String motivo, LocalDateTime ahora, String actor) {
+        String motivoLimpio = exigirTexto(motivo, "Pedir la devolucion requiere un motivo (R-12)");
         exigirEstado(EstadoSolicitud.EN_ADAPTACION, "pedir la devolucion de");
-        this.motivoCierre = motivo;
-        cambiarEstado(EstadoSolicitud.REVERTIDA, ahora, actor, "Devolucion: " + motivo);
+        this.motivoCierre = motivoLimpio;
+        cambiarEstado(EstadoSolicitud.REVERTIDA, ahora, actor, "Devolucion: " + motivoLimpio);
     }
 
     public boolean perteneceA(String usuario) {
         return adoptanteId.equals(usuario);
+    }
+
+    private static String exigirTexto(String valor, String mensaje) {
+        if (valor == null || valor.isBlank()) {
+            throw new SolicitudInvalidaException(mensaje);
+        }
+        return valor.trim();
     }
 
     private void exigirEstado(EstadoSolicitud esperado, String accion) {

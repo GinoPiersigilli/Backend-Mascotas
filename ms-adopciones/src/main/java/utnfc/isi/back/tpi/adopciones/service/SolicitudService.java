@@ -21,15 +21,12 @@ import utnfc.isi.back.tpi.adopciones.repository.SolicitudRepository;
 import utnfc.isi.back.tpi.common.exception.AccesoDenegadoException;
 import utnfc.isi.back.tpi.common.exception.ConflictoException;
 import utnfc.isi.back.tpi.common.exception.RecursoNoEncontradoException;
-import utnfc.isi.back.tpi.common.exception.SolicitudInvalidaException;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.Consumer;
 
 /**
@@ -50,8 +47,6 @@ import java.util.function.Consumer;
 public class SolicitudService {
 
     private static final Logger log = LoggerFactory.getLogger(SolicitudService.class);
-    private static final Set<EstadoSolicitud> ACTIVAS =
-            EnumSet.of(EstadoSolicitud.PENDIENTE, EstadoSolicitud.APROBADA, EstadoSolicitud.EN_ADAPTACION);
 
     private final SolicitudRepository solicitudRepository;
     private final PerfilRepository perfilRepository;
@@ -59,6 +54,7 @@ public class SolicitudService {
     private final EvaluadorSolicitud evaluador;
     private final PoliticaAdopcion politica;
     private final TransactionTemplate tx;
+    private final TransactionTemplate txReadOnly;
     private final Clock clock;
 
     public SolicitudService(SolicitudRepository solicitudRepository, PerfilRepository perfilRepository,
@@ -70,6 +66,8 @@ public class SolicitudService {
         this.evaluador = evaluador;
         this.politica = politica;
         this.tx = new TransactionTemplate(transactionManager);
+        this.txReadOnly = new TransactionTemplate(transactionManager);
+        this.txReadOnly.setReadOnly(true);
         this.clock = clock;
     }
 
@@ -84,7 +82,7 @@ public class SolicitudService {
                 .orElseThrow(() -> new ConflictoException(
                         "Antes de solicitar una adopcion hay que completar el perfil (R-03)"));
 
-        if (solicitudRepository.existsByAdoptanteIdAndEstadoIn(usuario.id(), ACTIVAS)) {
+        if (solicitudRepository.existsByAdoptanteIdAndEstadoIn(usuario.id(), EstadoSolicitud.activas())) {
             throw new ConflictoException("Ya tiene una solicitud activa; solo se admite una a la vez (R-02)");
         }
 
@@ -127,7 +125,7 @@ public class SolicitudService {
     // ------------------------------------------------------------------ consultas
 
     public List<SolicitudResponse> listar(Usuario usuario, EstadoSolicitud estado) {
-        return tx.execute(st -> {
+        return txReadOnly.execute(st -> {
             List<Solicitud> solicitudes;
             if (usuario.coordinador()) {
                 solicitudes = estado == null ? solicitudRepository.findAllByOrderByIdDesc()
@@ -141,11 +139,11 @@ public class SolicitudService {
     }
 
     public SolicitudResponse obtener(Usuario usuario, Long id) {
-        return tx.execute(st -> SolicitudResponse.desde(buscarVisible(usuario, id)));
+        return txReadOnly.execute(st -> SolicitudResponse.desde(buscarVisible(usuario, id)));
     }
 
     public List<EventoResponse> historial(Usuario usuario, Long id) {
-        return tx.execute(st -> buscarVisible(usuario, id).getEventos().stream().map(EventoResponse::desde).toList());
+        return txReadOnly.execute(st -> buscarVisible(usuario, id).getEventos().stream().map(EventoResponse::desde).toList());
     }
 
     // ------------------------------------------------------------------ P2: decisiones
@@ -172,7 +170,7 @@ public class SolicitudService {
 
     /** R-09 y R-10. Si el plazo ya vencio, se aplica el vencimiento y se informa 409. */
     public SolicitudResponse confirmarEntrega(Usuario usuario, Long id) {
-        Boolean vencida = tx.execute(st -> buscar(id).plazoEntregaVencido(LocalDateTime.now(clock), politica.plazoEntregaDias()));
+        Boolean vencida = txReadOnly.execute(st -> buscar(id).plazoEntregaVencido(LocalDateTime.now(clock), politica.plazoEntregaDias()));
         if (Boolean.TRUE.equals(vencida)) {
             vencerEntrega(id);
             throw new ConflictoException("El plazo de entrega de " + politica.plazoEntregaDias() + " dias vencio: "
@@ -212,7 +210,7 @@ public class SolicitudService {
     /** Ids de solicitudes APROBADAS cuya fecha de aprobacion es anterior al plazo (R-09). */
     public List<Long> buscarEntregasVencidas() {
         LocalDateTime limite = LocalDateTime.now(clock).minusDays(politica.plazoEntregaDias());
-        return tx.execute(st -> solicitudRepository
+        return txReadOnly.execute(st -> solicitudRepository
                 .findByEstadoAndFechaAprobacionBefore(EstadoSolicitud.APROBADA, limite)
                 .stream().map(Solicitud::getId).toList());
     }
@@ -221,9 +219,6 @@ public class SolicitudService {
 
     /** R-11 (CONFORME -> animal ADOPTADO) y R-12 (DESFAVORABLE -> animal DISPONIBLE). */
     public SolicitudResponse registrarControl(Usuario usuario, Long id, ResultadoControl resultado, String observaciones) {
-        if (resultado == ResultadoControl.DESFAVORABLE && (observaciones == null || observaciones.isBlank())) {
-            throw new SolicitudInvalidaException("Un control desfavorable requiere observaciones que expliquen el motivo");
-        }
         EstadoAnimal destino = resultado == ResultadoControl.CONFORME ? EstadoAnimal.ADOPTADO : EstadoAnimal.DISPONIBLE;
         return conCambioDeAnimal(id, destino,
                 s -> s.registrarControl(resultado, observaciones, LocalDateTime.now(clock), usuario.id()));
