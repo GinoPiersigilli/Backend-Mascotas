@@ -55,6 +55,14 @@ Postman ──► Keycloak :8180 (OIDC, emite JWT con realm_access.roles)
 Diagramas C4 (PlantUML): [C1](docs/diagramas/C1-Contexto.puml), [C2](docs/diagramas/C2-Contenedores.puml)
 y la [secuencia de aprobación](docs/diagramas/Secuencia-aprobar.puml).
 
+### C1 — Diagrama de Contexto
+
+![C1 - Diagrama de Contexto](docs/diagramas/C1-Contexto.svg)
+
+### C2 — Diagrama de Contenedores
+
+![C2 - Diagrama de Contenedores](docs/diagramas/C2-Contenedores.svg)
+
 | Módulo | Responsabilidad | Puerto |
 |---|---|---|
 | `tpi-common` | JAR reutilizable: `ErrorResponse`, excepciones, `GlobalExceptionHandler`, `KeycloakRoleConverter`, 401/403 en JSON, `ResourceServerDefaults`, filtro e interceptor de correlación. No se despliega | — |
