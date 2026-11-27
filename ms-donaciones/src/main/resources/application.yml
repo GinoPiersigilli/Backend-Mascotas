@@ -8,10 +8,14 @@ spring:
     url: ${DB_URL:jdbc:postgresql://localhost:5433/tpi}
     username: ${DB_USER:donaciones_user}
     password: ${DB_PASSWORD:donaciones_pass}
+  flyway:
+    default-schema: donaciones
+    schemas:
+      - donaciones
   jpa:
     open-in-view: false
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     properties:
       hibernate:
         default_schema: donaciones
