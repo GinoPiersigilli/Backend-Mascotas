@@ -160,13 +160,13 @@ Las 14 decisiones arquitectónicas completas están documentadas en [docs/ADR.md
 
 2. **Levantar con Docker Compose:**
    ```bash
-   # Desarrollo (publica Gateway :8080, Keycloak :8180, servicios :8081-:8083 y Postgres :5433)
+   # Desarrollo (publica Gateway :8080, Keycloak :8180, servicios :8081-:8083, Postgres :5433 y activa Swagger UI)
    docker compose up --build -d
 
    # Verificar estado (esperar healthy en los 7 contenedores)
    docker compose ps
 
-   # Modo restringido (solo publica Gateway :8080 y Keycloak :8180)
+   # Modo restringido (solo publica Gateway :8080 y Keycloak :8180; Swagger deshabilitado por defecto)
    docker compose -f docker-compose.yml up --build -d
    ```
 
@@ -187,7 +187,7 @@ Las 14 decisiones arquitectónicas completas están documentadas en [docs/ADR.md
 4. **Ejecución local sin Docker (para desarrollo):**
    Con `postgres` (`localhost:5433`) y `keycloak` (`localhost:8180`) activos, compilar e instalar `tpi-common` con `mvn clean install` y levantar cada servicio con `mvn -pl <modulo> spring-boot:run`.
 
-5. **Documentación OpenAPI / Swagger UI (en desarrollo):**
+5. **Documentación OpenAPI / Swagger UI (habilitada solo en desarrollo vía `docker-compose.override.yml`, `SWAGGER_ENABLED=false` por defecto en `docker-compose.yml`):**
    `http://localhost:8081/swagger-ui.html`, `http://localhost:8082/swagger-ui.html` y `http://localhost:8083/swagger-ui.html`.
 
 ### Pruebas y cobertura

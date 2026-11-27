@@ -1,15 +1,22 @@
-# Solo para desarrollo: publica los puertos de los servicios y de la base de negocio
-# (Docker Compose lo aplica automaticamente con "docker compose up").
-# Para ejecutar sin esto (solo Gateway y Keycloak publicados):
+# Solo para desarrollo: publica los puertos de los servicios y de la base de negocio,
+# y habilita Swagger UI en los microservicios (deshabilitado por defecto en docker-compose.yml).
+# Docker Compose lo aplica automaticamente con "docker compose up".
+# Para ejecutar sin esto (solo Gateway y Keycloak publicados, sin Swagger):
 #   docker compose -f docker-compose.yml up --build -d
 services:
   ms-animales:
+    environment:
+      SWAGGER_ENABLED: "true"
     ports:
       - "8081:8081"
   ms-adopciones:
+    environment:
+      SWAGGER_ENABLED: "true"
     ports:
       - "8082:8082"
   ms-donaciones:
+    environment:
+      SWAGGER_ENABLED: "true"
     ports:
       - "8083:8083"
   postgres:

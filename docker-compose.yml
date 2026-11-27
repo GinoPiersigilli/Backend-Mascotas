@@ -107,7 +107,7 @@ services:
       DB_USER: ${ANIMALES_DB_USER}
       DB_PASSWORD: ${ANIMALES_DB_PASSWORD}
       ANIMALES_DATOS_DEMO: ${ANIMALES_DATOS_DEMO:-true}
-      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-true}
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-false}
     depends_on:
       postgres:
         condition: service_healthy
@@ -141,7 +141,7 @@ services:
       DISTANCIA_MAX_KM: ${DISTANCIA_MAX_KM:-100}
       PLAZO_ENTREGA_DIAS: ${PLAZO_ENTREGA_DIAS:-7}
       PERIODO_ADAPTACION_DIAS: ${PERIODO_ADAPTACION_DIAS:-30}
-      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-true}
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-false}
     depends_on:
       postgres:
         condition: service_healthy
@@ -170,7 +170,7 @@ services:
       MP_ACCESS_TOKEN: ${MP_ACCESS_TOKEN}
       MP_USAR_SANDBOX_INIT_POINT: ${MP_USAR_SANDBOX_INIT_POINT:-false}
       DONACION_MONTO_MINIMO: ${DONACION_MONTO_MINIMO:-1}
-      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-true}
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-false}
     depends_on:
       postgres:
         condition: service_healthy
