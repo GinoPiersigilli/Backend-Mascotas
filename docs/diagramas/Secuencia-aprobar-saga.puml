@@ -1,0 +1,64 @@
+@startuml Secuencia-aprobar-saga
+title Aprobar solicitud con saga orquestada, idempotencia y reconciliación (propuesta ADR-17)
+
+actor Coordinador
+participant "API Gateway" as GW
+participant "ms-adopciones" as AD
+participant "Reconciliador\n(@Scheduled)" as REC
+database "esquema adopciones" as DB_AD
+participant "ms-animales" as AN
+database "esquema animales" as DB_AN
+
+== Camino feliz: aprobar solicitud (R-07, R-08) ==
+Coordinador -> GW : POST /api/solicitudes/{id}/aprobar {justificacion}
+GW -> AD : reenvía + X-Correlation-ID
+AD -> DB_AD : Tx 1: valida R-07/R-08; registra saga EN_PROGRESO\n(operacionId=UUID, bloquea comandos concurrentes); COMMIT
+note right of AD
+  La llamada HTTP se ejecuta fuera de la transacción JDBC
+  (no retiene conexión HikariCP ni row lock).
+end note
+AD -> AN : PUT /internal/animales/{animalId}/estado {RESERVADO}\nIdempotency-Key: operacionId
+AN -> DB_AN : Tx: DISPONIBLE -> RESERVADO\n+ INSERT operacion_procesada(operacionId); COMMIT
+AN --> AD : 200 OK (RESERVADO)
+AD -> DB_AD : Tx 2: Solicitud -> APROBADA + evento historial\n+ saga COMPLETADA; COMMIT
+AD --> Coordinador : 200 APROBADA
+
+== Rechazo de negocio en Animales (409, ADR-03) ==
+AD -> AN : PUT /internal/animales/{animalId}/estado {RESERVADO}\nIdempotency-Key: operacionId
+AN --> AD : 409 Conflict (ej. animal NO_DISPONIBLE o ya RESERVADO)
+AD -> DB_AD : Tx 2 (compensación local): saga RECHAZADA\n(Solicitud permanece PENDIENTE); COMMIT
+AD --> Coordinador : 409 Conflict
+
+== Inconsistencia residual (ADR-06): Animales confirma, falla Tx 2 o timeout de lectura ==
+AD -> AN : PUT /internal/animales/{animalId}/estado {RESERVADO}\nIdempotency-Key: operacionId
+AN -> DB_AN : Tx: DISPONIBLE -> RESERVADO\n+ INSERT operacion_procesada(operacionId); COMMIT
+alt Timeout de lectura / corte TCP tras commit remoto
+  AN --x AD : respuesta perdida (read-timeout)
+else Animales respondió 200 pero falla el COMMIT local en adopciones
+  AN --> AD : 200 OK (RESERVADO)
+  AD -> DB_AD : Tx 2: COMMIT falla (caída PostgreSQL / crash del proceso)
+  DB_AD --x AD : error de persistencia
+end
+AD --> Coordinador : 503 / 500 (la saga queda EN_PROGRESO en adopciones)
+
+== Reconciliación asíncrona (@Scheduled) y compensación ==
+REC -> DB_AD : selecciona sagas EN_PROGRESO vencidas\n(SELECT ... FOR UPDATE SKIP LOCKED)
+REC -> AN : GET /internal/operaciones/{operacionId}
+alt Animales NO aplicó la operación
+  AN --> REC : 404 Not Found
+  REC -> DB_AD : Tx: marca saga COMPENSADA (Solicitud sigue PENDIENTE); COMMIT
+else Animales SÍ aplicó RESERVADO (aprobar: compensable en EstadoAnimal)
+  AN --> REC : 200 OK {estadoAplicado: RESERVADO}
+  REC -> AN : PUT /internal/animales/{animalId}/estado {DISPONIBLE}\nIdempotency-Key: comp-operacionId
+  AN -> DB_AN : Tx: RESERVADO -> DISPONIBLE\n+ INSERT operacion_procesada(comp-operacionId); COMMIT
+  AN --> REC : 200 OK (DISPONIBLE)
+  REC -> DB_AD : Tx: marca saga COMPENSADA (Solicitud sigue PENDIENTE); COMMIT
+else Transición no compensable (ej. ADOPTADO terminal o EN_ADAPTACION)
+  note right of REC
+    Forward recovery: reenvía con la misma Idempotency-Key
+    (si aún no se aplicó) y completa la transición local
+    en adopciones sin revertir Animales.
+  end note
+  REC -> DB_AD : Tx: aplica estado final local + saga COMPLETADA; COMMIT
+end
+@enduml
