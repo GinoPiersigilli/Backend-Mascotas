@@ -4,6 +4,9 @@ server:
 spring:
   application:
     name: ms-animales
+  threads:
+    virtual:
+      enabled: true
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5433/tpi}
     username: ${DB_USER:animales_user}

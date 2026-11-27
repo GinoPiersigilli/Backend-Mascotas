@@ -202,9 +202,9 @@ class FlujoAdopcionIntegrationTest {
 
         // Colaboracion con Animales: cada transicion se pidio en orden
         InOrder orden = inOrder(animales);
-        orden.verify(animales).cambiarEstado(1L, EstadoAnimal.RESERVADO);
-        orden.verify(animales).cambiarEstado(1L, EstadoAnimal.EN_ADAPTACION);
-        orden.verify(animales).cambiarEstado(1L, EstadoAnimal.ADOPTADO);
+        orden.verify(animales).cambiarEstado(1L, EstadoAnimal.RESERVADO, id);
+        orden.verify(animales).cambiarEstado(1L, EstadoAnimal.EN_ADAPTACION, id);
+        orden.verify(animales).cambiarEstado(1L, EstadoAnimal.ADOPTADO, id);
 
         mvc.perform(get("/api/solicitudes/" + id + "/historial").with(adoptante("ana")))
                 .andExpect(jsonPath("$.length()").value(4))
@@ -294,7 +294,7 @@ class FlujoAdopcionIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("R-08")));
-        verify(animales, never()).cambiarEstado(anyLong(), any());
+        verify(animales, never()).cambiarEstado(anyLong(), any(), any());
 
         mvc.perform(post("/api/solicitudes/" + id + "/aprobar").with(coordinador())
                         .contentType(MediaType.APPLICATION_JSON).content("{\"justificacion\":\"Traslado garantizado\"}"))
@@ -306,7 +306,7 @@ class FlujoAdopcionIntegrationTest {
     void siAnimalesNoRespondeAlAprobarLaSolicitudSiguePendiente() throws Exception {
         completarPerfil("ana", true, false);
         long id = presentar("ana", 1L);
-        when(animales.cambiarEstado(1L, EstadoAnimal.RESERVADO))
+        when(animales.cambiarEstado(1L, EstadoAnimal.RESERVADO, id))
                 .thenThrow(new ServicioNoDisponibleException("El servicio de Animales no responde"));
 
         mvc.perform(post("/api/solicitudes/" + id + "/aprobar").with(coordinador())
@@ -321,7 +321,7 @@ class FlujoAdopcionIntegrationTest {
     void r07SiAnimalesRechazaLaReservaNoSeAprueba() throws Exception {
         completarPerfil("ana", true, false);
         long id = presentar("ana", 1L);
-        when(animales.cambiarEstado(1L, EstadoAnimal.RESERVADO))
+        when(animales.cambiarEstado(1L, EstadoAnimal.RESERVADO, id))
                 .thenThrow(new ConflictoException("Transicion invalida para el animal 1: NO_DISPONIBLE -> RESERVADO"));
 
         mvc.perform(post("/api/solicitudes/" + id + "/aprobar").with(coordinador())
@@ -356,7 +356,7 @@ class FlujoAdopcionIntegrationTest {
         mvc.perform(get("/api/solicitudes/" + id).with(adoptante("ana")))
                 .andExpect(jsonPath("$.estado").value("CANCELADA"))
                 .andExpect(jsonPath("$.motivoCierre").value(org.hamcrest.Matchers.containsString("R-09")));
-        verify(animales).cambiarEstado(1L, EstadoAnimal.DISPONIBLE);
+        verify(animales).cambiarEstado(1L, EstadoAnimal.DISPONIBLE, id);
     }
 
     @Test
@@ -372,7 +372,7 @@ class FlujoAdopcionIntegrationTest {
 
         mvc.perform(get("/api/solicitudes/" + id).with(coordinador()))
                 .andExpect(jsonPath("$.estado").value("CANCELADA"));
-        verify(animales, never()).cambiarEstado(1L, EstadoAnimal.EN_ADAPTACION);
+        verify(animales, never()).cambiarEstado(1L, EstadoAnimal.EN_ADAPTACION, id);
     }
 
     @Test
@@ -387,7 +387,7 @@ class FlujoAdopcionIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON).content("{\"motivo\":\"Me mudo al exterior\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.estado").value("REVERTIDA"));
-        verify(animales).cambiarEstado(1L, EstadoAnimal.DISPONIBLE);
+        verify(animales).cambiarEstado(1L, EstadoAnimal.DISPONIBLE, id);
     }
 
     @Test
@@ -426,6 +426,6 @@ class FlujoAdopcionIntegrationTest {
                 .andExpect(status().isBadRequest());
 
         mvc.perform(get("/api/solicitudes/999").with(coordinador())).andExpect(status().isNotFound());
-        verify(animales, never()).cambiarEstado(eq(999L), any());
+        verify(animales, never()).cambiarEstado(eq(999L), any(), any());
     }
 }

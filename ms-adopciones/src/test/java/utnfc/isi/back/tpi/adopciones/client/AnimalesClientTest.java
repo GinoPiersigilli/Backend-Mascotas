@@ -75,6 +75,17 @@ class AnimalesClientTest {
     }
 
     @Test
+    void pideLaTransicionConSolicitudIdParaIdempotencia() {
+        server.expect(requestTo(BASE + "/internal/animales/1/estado"))
+                .andExpect(method(HttpMethod.PUT))
+                .andExpect(content().json("{\"nuevoEstado\":\"RESERVADO\",\"solicitudId\":42}"))
+                .andRespond(withSuccess(LUNA.replace("DISPONIBLE", "RESERVADO"), MediaType.APPLICATION_JSON));
+
+        assertThat(client.cambiarEstado(1L, EstadoAnimal.RESERVADO, 42L).estado()).isEqualTo(EstadoAnimal.RESERVADO);
+        server.verify();
+    }
+
+    @Test
     void animalInexistenteSeTraduceA404() {
         server.expect(requestTo(BASE + "/internal/animales/99")).andRespond(withStatus(HttpStatus.NOT_FOUND));
 

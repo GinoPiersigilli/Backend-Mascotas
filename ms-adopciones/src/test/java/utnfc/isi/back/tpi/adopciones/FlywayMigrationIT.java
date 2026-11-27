@@ -49,9 +49,14 @@ class FlywayMigrationIT {
     @Test
     void migracionInicialValidaEntidadesYRestriccionesUnicas() {
         Integer migraciones = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM adopciones.flyway_schema_history WHERE version = '1' AND success = true",
+                "SELECT COUNT(*) FROM adopciones.flyway_schema_history WHERE version IN ('1', '2') AND success = true",
                 Integer.class);
-        assertThat(migraciones).isEqualTo(1);
+        assertThat(migraciones).isEqualTo(2);
+
+        Integer tablaShedlock = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'adopciones' AND table_name = 'shedlock'",
+                Integer.class);
+        assertThat(tablaShedlock).isEqualTo(1);
 
         LocalDateTime ahora = LocalDateTime.of(2026, 5, 1, 10, 0);
         Perfil perfil = new Perfil("sub-it-1");

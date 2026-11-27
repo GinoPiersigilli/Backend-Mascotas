@@ -3,11 +3,14 @@ package utnfc.isi.back.tpi.donaciones.client;
 import com.sun.net.httpserver.HttpServer;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
+import io.github.resilience4j.retry.Retry;
+import io.github.resilience4j.retry.RetryConfig;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 import utnfc.isi.back.tpi.common.exception.ServicioNoDisponibleException;
 
+import java.math.BigDecimal;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -84,6 +87,64 @@ class MercadoPagoResilienciaTest {
             assertThat(client.buscarPagoAprobado("ref-1")).contains("777");
             assertThat(cb.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
             assertThat(hits.get()).isEqualTo(3);
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void consultaDePagoReintentaFallaTransitoriaPeroCrearCobroNuncaSeReintenta() throws Exception {
+        AtomicInteger hitsConsulta = new AtomicInteger();
+        AtomicInteger hitsCobro = new AtomicInteger();
+
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/v1/payments/search", ex -> {
+            if (hitsConsulta.incrementAndGet() == 1) {
+                ex.sendResponseHeaders(503, -1);
+                ex.close();
+                return;
+            }
+            byte[] body = "{\"results\":[{\"id\":888,\"status\":\"approved\"}]}".getBytes(StandardCharsets.UTF_8);
+            ex.getResponseHeaders().add("Content-Type", "application/json");
+            ex.sendResponseHeaders(200, body.length);
+            ex.getResponseBody().write(body);
+            ex.close();
+        });
+        server.createContext("/checkout/preferences", ex -> {
+            hitsCobro.incrementAndGet();
+            ex.sendResponseHeaders(503, -1);
+            ex.close();
+        });
+        server.start();
+        try {
+            SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+            factory.setConnectTimeout(Duration.ofSeconds(1));
+            factory.setReadTimeout(Duration.ofSeconds(1));
+            RestClient restClient = RestClient.builder()
+                    .baseUrl("http://127.0.0.1:" + server.getAddress().getPort())
+                    .requestFactory(factory)
+                    .build();
+            CircuitBreaker cb = CircuitBreaker.of("mp-retry-test", CircuitBreakerConfig.custom()
+                    .failureRateThreshold(50)
+                    .slidingWindowSize(4)
+                    .minimumNumberOfCalls(4)
+                    .recordExceptions(ServicioNoDisponibleException.class)
+                    .build());
+            Retry retry = Retry.of("mp-retry-test", RetryConfig.custom()
+                    .maxAttempts(3)
+                    .waitDuration(Duration.ofMillis(20))
+                    .retryExceptions(ServicioNoDisponibleException.class)
+                    .build());
+            MercadoPagoClient client = new MercadoPagoClient(restClient, false, cb, retry);
+
+            // GET idempotente: reintenta tras 503 inicial y recupera en el intento 2
+            assertThat(client.buscarPagoAprobado("ref-retry")).contains("888");
+            assertThat(hitsConsulta.get()).isEqualTo(2);
+
+            // POST no idempotente: falla en el primer intento y NUNCA se reintenta
+            assertThatThrownBy(() -> client.crearCobro("ref-no-retry", BigDecimal.valueOf(500), "Donacion"))
+                    .isInstanceOf(ServicioNoDisponibleException.class);
+            assertThat(hitsCobro.get()).isEqualTo(1);
         } finally {
             server.stop(0);
         }

@@ -3,6 +3,8 @@ package utnfc.isi.back.tpi.adopciones.client;
 import com.sun.net.httpserver.HttpServer;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
+import io.github.resilience4j.retry.Retry;
+import io.github.resilience4j.retry.RetryConfig;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
@@ -196,6 +198,45 @@ class ClientesResilienciaTest {
             assertThatThrownBy(() -> client.cambiarEstado(1L, EstadoAnimal.RESERVADO))
                     .isInstanceOf(ConflictoException.class);
 
+            assertThat(cb.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void georefReintentaFallaTransitoriaYSeRecuperaSinAbrirCircuito() throws Exception {
+        AtomicInteger hits = new AtomicInteger();
+
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/direcciones", ex -> {
+            if (hits.incrementAndGet() == 1) {
+                ex.sendResponseHeaders(503, -1);
+                ex.close();
+                return;
+            }
+            byte[] body = """
+                    {"cantidad":1,"direcciones":[{"ubicacion":{"lat":-31.4096,"lon":-64.1966}}]}
+                    """.getBytes(StandardCharsets.UTF_8);
+            ex.getResponseHeaders().add("Content-Type", "application/json");
+            ex.sendResponseHeaders(200, body.length);
+            ex.getResponseBody().write(body);
+            ex.close();
+        });
+        server.start();
+        try {
+            String baseUrl = "http://127.0.0.1:" + server.getAddress().getPort();
+            CircuitBreaker cb = circuitoRapido("georef-retry-test");
+            Retry retry = Retry.of("georef-retry-test", RetryConfig.custom()
+                    .maxAttempts(3)
+                    .waitDuration(Duration.ofMillis(20))
+                    .retryExceptions(ServicioNoDisponibleException.class)
+                    .build());
+            GeorefClient client = new GeorefClient(restClientConTimeout(baseUrl, Duration.ofSeconds(1)), cb, retry);
+
+            assertThat(client.geolocalizar("Av Colon 1000", "Cordoba", "Cordoba"))
+                    .contains(new Coordenadas(-31.4096, -64.1966));
+            assertThat(hits.get()).isEqualTo(2);
             assertThat(cb.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
         } finally {
             server.stop(0);

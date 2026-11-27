@@ -71,6 +71,10 @@ public class Animal {
     @Column(name = "fecha_actualizacion", nullable = false)
     private LocalDateTime fechaActualizacion;
 
+    /** Solicitud propietaria del estado actual del proceso; habilita reintentos idempotentes (WS-3). */
+    @Column(name = "solicitud_activa_id")
+    private Long solicitudActivaId;
+
     @Version
     private long version;
 
@@ -123,16 +127,44 @@ public class Animal {
      * Solo se aceptan las transiciones de {@link EstadoAnimal#admiteTransicionDelProceso}.
      */
     public void cambiarEstadoPorProceso(EstadoAnimal destino) {
-        cambiarEstadoPorProceso(destino, LocalDateTime.now());
+        cambiarEstadoPorProceso(destino, LocalDateTime.now(), null);
     }
 
     public void cambiarEstadoPorProceso(EstadoAnimal destino, LocalDateTime ahora) {
+        cambiarEstadoPorProceso(destino, ahora, null);
+    }
+
+    /**
+     * Transicion idempotente cuando incluye {@code solicitudId}:
+     * - Si el animal ya esta en {@code destino} para la misma solicitud (o ya esta DISPONIBLE sin
+     *   solicitud activa), devuelve sin modificar estado ni version (reintento seguro).
+     * - Si esta en un estado en curso (RESERVADO / EN_ADAPTACION) perteneciente a otra solicitud,
+     *   rechaza con 409.
+     */
+    public void cambiarEstadoPorProceso(EstadoAnimal destino, LocalDateTime ahora, Long solicitudId) {
+        if (destino == this.estado && solicitudId != null) {
+            boolean mismaSolicitud = solicitudId.equals(this.solicitudActivaId);
+            boolean yaLiberado = destino == EstadoAnimal.DISPONIBLE && this.solicitudActivaId == null;
+            if (mismaSolicitud || yaLiberado) {
+                return;
+            }
+        }
+        if (this.estado.tieneAdopcionEnCurso() && this.solicitudActivaId != null
+                && solicitudId != null && !solicitudId.equals(this.solicitudActivaId)) {
+            throw new ConflictoException("El animal " + id + " tiene una adopcion en curso de la solicitud "
+                    + solicitudActivaId);
+        }
         if (!estado.admiteTransicionDelProceso(destino)) {
             throw new ConflictoException("Transicion invalida para el animal " + id + ": "
                     + estado + " -> " + destino);
         }
         this.estado = destino;
         this.fechaActualizacion = ahora;
+        if (destino == EstadoAnimal.DISPONIBLE) {
+            this.solicitudActivaId = null;
+        } else if (solicitudId != null) {
+            this.solicitudActivaId = solicitudId;
+        }
     }
 
     /**
@@ -227,5 +259,9 @@ public class Animal {
 
     public long getVersion() {
         return version;
+    }
+
+    public Long getSolicitudActivaId() {
+        return solicitudActivaId;
     }
 }

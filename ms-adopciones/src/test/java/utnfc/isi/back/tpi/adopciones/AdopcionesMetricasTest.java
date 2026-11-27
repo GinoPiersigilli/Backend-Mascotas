@@ -128,7 +128,7 @@ class AdopcionesMetricasTest {
                 .andReturn().getResponse().getContentAsString();
         long id2 = ((Number) JsonPath.read(body2, "$.id")).longValue();
 
-        when(animales.cambiarEstado(2L, EstadoAnimal.RESERVADO))
+        when(animales.cambiarEstado(2L, EstadoAnimal.RESERVADO, id2))
                 .thenThrow(new ServicioNoDisponibleException("Animales no responde"));
         mvc.perform(post("/api/solicitudes/" + id2 + "/aprobar").with(con("coord-1", "COORDINADOR"))
                         .contentType(MediaType.APPLICATION_JSON).content("{}"))

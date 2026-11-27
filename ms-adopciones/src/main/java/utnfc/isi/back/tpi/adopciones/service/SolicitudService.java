@@ -230,7 +230,7 @@ public class SolicitudService {
             }
             s.vencerPlazoEntrega(ahora, politica.plazoEntregaDias());
             solicitudRepository.saveAndFlush(s);
-            animalesClient.cambiarEstado(s.getAnimalId(), EstadoAnimal.DISPONIBLE);
+            animalesClient.cambiarEstado(s.getAnimalId(), EstadoAnimal.DISPONIBLE, id);
             log.info("Solicitud {} cancelada por vencimiento del plazo de entrega; animal {} liberado", id, s.getAnimalId());
             return true;
         });
@@ -280,7 +280,7 @@ public class SolicitudService {
             Solicitud s = buscar(id);
             cambio.accept(s);
             Solicitud guardada = solicitudRepository.saveAndFlush(s);
-            animalesClient.cambiarEstado(guardada.getAnimalId(), destinoAnimal);
+            animalesClient.cambiarEstado(guardada.getAnimalId(), destinoAnimal, id);
             log.info("Solicitud {} -> {}; animal {} -> {}", id, guardada.getEstado(), guardada.getAnimalId(), destinoAnimal);
             return SolicitudResponse.desde(guardada);
         });

@@ -2,11 +2,20 @@ package utnfc.isi.back.tpi.animales.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import utnfc.isi.back.tpi.animales.model.EstadoAnimal;
 
-/** Cuerpo de la API interna: estado al que el proceso de adopcion quiere llevar al animal. */
+/** Cuerpo de la API interna: estado destino y solicitudId opcional para idempotencia de reintentos. */
 public record CambioEstadoRequest(
         @Schema(example = "RESERVADO")
         @NotNull(message = "es obligatorio")
-        EstadoAnimal nuevoEstado) {
+        EstadoAnimal nuevoEstado,
+
+        @Schema(description = "Identificador opcional de la solicitud para transiciones idempotentes", example = "42", nullable = true)
+        @Positive(message = "debe ser positivo")
+        Long solicitudId) {
+
+    public CambioEstadoRequest(EstadoAnimal nuevoEstado) {
+        this(nuevoEstado, null);
+    }
 }

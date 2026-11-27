@@ -79,19 +79,27 @@ public class AnimalesClient {
 
     /** Pide a Animales una transicion de estado; Animales decide si es valida. */
     public AnimalDto cambiarEstado(Long animalId, EstadoAnimal nuevoEstado) {
-        return ejecutarConCircuito(() -> solicitarCambioDeEstado(animalId, nuevoEstado));
+        return cambiarEstado(animalId, nuevoEstado, null);
     }
 
-    private AnimalDto solicitarCambioDeEstado(Long animalId, EstadoAnimal nuevoEstado) {
+    /** Pide a Animales una transicion de estado enviando solicitudId para idempotencia (WS-3). */
+    public AnimalDto cambiarEstado(Long animalId, EstadoAnimal nuevoEstado, Long solicitudId) {
+        return ejecutarConCircuito(() -> solicitarCambioDeEstado(animalId, nuevoEstado, solicitudId));
+    }
+
+    private AnimalDto solicitarCambioDeEstado(Long animalId, EstadoAnimal nuevoEstado, Long solicitudId) {
+        Map<String, Object> cuerpo = solicitudId == null
+                ? Map.of("nuevoEstado", nuevoEstado.name())
+                : Map.of("nuevoEstado", nuevoEstado.name(), "solicitudId", solicitudId);
         try {
             AnimalDto animal = restClient.put()
                     .uri("/internal/animales/{id}/estado", animalId)
                     .headers(h -> h.setBearerAuth(tokenProvider.obtenerToken()))
                     .contentType(MediaType.APPLICATION_JSON)
-                    .body(Map.of("nuevoEstado", nuevoEstado.name()))
+                    .body(cuerpo)
                     .retrieve()
                     .body(AnimalDto.class);
-            log.info("Animales confirmo el animal {} -> {}", animalId, nuevoEstado);
+            log.info("Animales confirmo el animal {} -> {} (solicitud {})", animalId, nuevoEstado, solicitudId);
             return animal;
         } catch (RestClientResponseException e) {
             throw traducir(e, animalId);
