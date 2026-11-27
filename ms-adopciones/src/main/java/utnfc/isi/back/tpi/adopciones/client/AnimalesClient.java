@@ -34,6 +34,14 @@ public class AnimalesClient {
         this.tokenProvider = tokenProvider;
     }
 
+    /**
+     * Precalienta el token de servicio antes de abrir una transaccion de base de datos,
+     * para evitar un POST bloqueante a Keycloak mientras se retiene la conexion SQL.
+     */
+    public void asegurarToken() {
+        tokenProvider.obtenerToken();
+    }
+
     public AnimalDto obtener(Long animalId) {
         try {
             AnimalDto animal = restClient.get()
