@@ -208,6 +208,7 @@ public class SolicitudService {
      * Si Animales no responde, la excepcion deshace todo y se reintenta en la proxima ejecucion.
      */
     public boolean vencerEntrega(Long id) {
+        animalesClient.asegurarToken();
         Boolean resultado = tx.execute(st -> {
             Solicitud s = buscar(id);
             LocalDateTime ahora = LocalDateTime.now(clock);
@@ -260,6 +261,8 @@ public class SolicitudService {
 
     /** Aplica el cambio local, lo envia a la base y recien entonces pide el cambio a Animales. */
     private SolicitudResponse conCambioDeAnimal(Long id, EstadoAnimal destinoAnimal, Consumer<Solicitud> cambio) {
+        // Precalienta el token de servicio fuera de la transaccion para evitar un POST a Keycloak con la conexion abierta (ADR-15)
+        animalesClient.asegurarToken();
         return tx.execute(st -> {
             Solicitud s = buscar(id);
             cambio.accept(s);

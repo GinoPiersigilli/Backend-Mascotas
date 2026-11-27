@@ -116,6 +116,13 @@ class AnimalesClientTest {
     }
 
     @Test
+    void asegurarTokenPrecalientaElProveedor() {
+        client.asegurarToken();
+
+        verify(tokens).obtenerToken();
+    }
+
+    @Test
     void estadoDesconocidoEsRespuestaInesperada() {
         server.expect(requestTo(BASE + "/internal/animales/1"))
                 .andRespond(withSuccess(LUNA.replace("DISPONIBLE", "VOLANDO"), MediaType.APPLICATION_JSON));

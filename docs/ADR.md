@@ -100,3 +100,13 @@ Formato: contexto → alternativas → decisión → consecuencias → evidencia
 ## ADR-14. Docker: construcción en dos etapas desde la raíz
 
 - **Decisión:** cada Dockerfile instala POM padre y `tpi-common` en el `.m2` de la imagen y compila el servicio; imagen final `eclipse-temurin:21-jre`. Healthchecks sin `curl` (bash `/dev/tcp`); `depends_on` con `service_healthy`; logging con rotación.
+
+## ADR-15. Renovación de token de servicio con `ReentrantLock` y precalentamiento fuera de la transacción
+
+- **Contexto:** `ServiceTokenProvider.obtenerToken()` utilizaba `synchronized` envolviendo la llamada HTTP `POST` a Keycloak, y `AnimalesClient.cambiarEstado(...)` pedía el token de forma perezosa desde adentro de `tx.execute(...)` en `SolicitudService.conCambioDeAnimal` y `vencerEntrega`.
+- **Alternativas:** (a) mantener `synchronized`; (b) sacar `animalesClient.cambiarEstado(...)` fuera de la transacción de base de datos; (c) caché `volatile` (`TokenCacheado`) con camino rápido sin lock, `ReentrantLock` con doble verificación solo al renovar, y precalentamiento del token antes de abrir `tx.execute(...)`.
+- **Decisión:** (c).
+- **Justificación:**
+  - **`ReentrantLock` vs `synchronized`:** en Java 21, el I/O bloqueante dentro de un bloque `synchronized` fija (*pinning*) el hilo portador si se emplean *virtual threads*. Además, leer un `record` inmutable desde un campo `volatile` elimina la contención en el camino feliz, mientras que la doble verificación dentro del `ReentrantLock` garantiza una única llamada a Keycloak cuando concurren múltiples hilos con el token vencido.
+  - **Por qué no se movió `cambiarEstado` fuera de la transacción:** sacarlo alteraría la semántica de fallos documentada en [ADR-06](#adr-06-consistencia-entre-servicios-sin-transacción-distribuida) (si `ms-animales` rechaza con 409 o no responde con 503, el *rollback* automático evita dejar una solicitud `APROBADA` sin el animal `RESERVADO`). Precalentar con `animalesClient.asegurarToken()` antes de `tx.execute(...)` saca el eventual `POST` a Keycloak fuera de la transacción sin cambiar las garantías de consistencia.
+- **Evidencia:** `ServiceTokenProvider`, `AnimalesClient.asegurarToken`, `SolicitudService` (`conCambioDeAnimal`, `vencerEntrega`), `ServiceTokenProviderTest`.

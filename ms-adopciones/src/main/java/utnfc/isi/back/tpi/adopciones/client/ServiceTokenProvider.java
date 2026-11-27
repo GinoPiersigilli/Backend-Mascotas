@@ -12,6 +12,7 @@ import utnfc.isi.back.tpi.common.exception.ServicioNoDisponibleException;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Map;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Obtiene de Keycloak el token del cliente confidencial "adopciones-service"
@@ -20,6 +21,10 @@ import java.util.Map;
  * Se usa para llamar a la API interna de Animales tanto en operaciones iniciadas por un
  * usuario como en la tarea programada, donde no hay ningun usuario. El token del usuario
  * NO se reenvia a Animales: la API interna exige el rol SERVICIO, que ningun humano tiene.
+ *
+ * Concurrencia: la lectura del token vigente es libre de bloqueos mediante un campo
+ * {@code volatile}. Solo la renovacion adquiere un {@link ReentrantLock} con doble
+ * verificacion, evitando fijar (pinning) virtual threads de Java 21 durante I/O HTTP.
  */
 public class ServiceTokenProvider {
 
@@ -27,14 +32,20 @@ public class ServiceTokenProvider {
     /** Margen para renovar el token antes de que venza durante una llamada. */
     private static final long MARGEN_SEGUNDOS = 30;
 
+    private record TokenCacheado(String valor, Instant vencimiento) {
+        boolean esValido(Instant ahora) {
+            return ahora.isBefore(vencimiento.minusSeconds(MARGEN_SEGUNDOS));
+        }
+    }
+
     private final RestClient restClient;
     private final String tokenUri;
     private final String clientId;
     private final String clientSecret;
     private final Clock clock;
+    private final ReentrantLock lock = new ReentrantLock();
 
-    private String token;
-    private Instant vencimiento = Instant.EPOCH;
+    private volatile TokenCacheado cache;
 
     public ServiceTokenProvider(RestClient restClient, String tokenUri, String clientId, String clientSecret, Clock clock) {
         this.restClient = restClient;
@@ -44,19 +55,31 @@ public class ServiceTokenProvider {
         this.clock = clock;
     }
 
-    public synchronized String obtenerToken() {
-        if (token == null || clock.instant().isAfter(vencimiento.minusSeconds(MARGEN_SEGUNDOS))) {
-            renovar();
+    public String obtenerToken() {
+        TokenCacheado actual = cache;
+        if (actual != null && actual.esValido(clock.instant())) {
+            return actual.valor();
         }
-        return token;
+        lock.lock();
+        try {
+            actual = cache;
+            if (actual != null && actual.esValido(clock.instant())) {
+                return actual.valor();
+            }
+            TokenCacheado renovado = renovar();
+            cache = renovado;
+            return renovado.valor();
+        } finally {
+            lock.unlock();
+        }
     }
 
     /** Descarta el token cacheado (por ejemplo, si Animales lo rechazo con 401). */
-    public synchronized void invalidar() {
-        token = null;
+    public void invalidar() {
+        cache = null;
     }
 
-    private void renovar() {
+    private TokenCacheado renovar() {
         MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
         form.add("grant_type", "client_credentials");
         form.add("client_id", clientId);
@@ -72,9 +95,9 @@ public class ServiceTokenProvider {
                 throw new ServicioNoDisponibleException("Keycloak devolvio una respuesta sin access_token");
             }
             long expiraEn = respuesta.get("expires_in") instanceof Number n ? n.longValue() : 60;
-            this.token = accessToken;
-            this.vencimiento = clock.instant().plusSeconds(expiraEn);
+            Instant vencimiento = clock.instant().plusSeconds(expiraEn);
             log.debug("Token de servicio renovado; vence en {} s", expiraEn);
+            return new TokenCacheado(accessToken, vencimiento);
         } catch (RestClientException e) {
             // Nunca se registra el secreto ni el token
             log.warn("No se pudo obtener el token de servicio: {}", e.getClass().getSimpleName());
