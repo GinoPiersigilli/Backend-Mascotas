@@ -7,6 +7,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import utnfc.isi.back.tpi.common.exception.ConflictoException;
@@ -22,7 +23,9 @@ import java.time.LocalDateTime;
  * mismo animal a la vez, la segunda falla y se responde 409 en lugar de pisar a la primera.
  */
 @Entity
-@Table(name = "animal")
+@Table(name = "animal", indexes = {
+        @Index(name = "idx_animal_estado_especie", columnList = "estado, especie")
+})
 public class Animal {
 
     @Id

@@ -10,6 +10,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
@@ -17,6 +18,7 @@ import jakarta.persistence.OrderColumn;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import jakarta.persistence.Version;
+import org.hibernate.annotations.BatchSize;
 import utnfc.isi.back.tpi.common.exception.ConflictoException;
 import utnfc.isi.back.tpi.common.exception.SolicitudInvalidaException;
 
@@ -42,6 +44,10 @@ import java.util.List;
 @Table(name = "solicitud", uniqueConstraints = {
         @UniqueConstraint(name = "uk_solicitud_animal_pendiente", columnNames = "animal_pendiente"),
         @UniqueConstraint(name = "uk_solicitud_adoptante_activo", columnNames = "adoptante_activo")
+}, indexes = {
+        @Index(name = "idx_solicitud_adoptante_id", columnList = "adoptante_id"),
+        @Index(name = "idx_solicitud_animal_estado", columnList = "animal_id, estado"),
+        @Index(name = "idx_solicitud_estado_fecha_aprobacion", columnList = "estado, fecha_aprobacion")
 })
 public class Solicitud {
 
@@ -81,6 +87,7 @@ public class Solicitud {
     @CollectionTable(name = "solicitud_observacion", joinColumns = @JoinColumn(name = "solicitud_id"))
     @OrderColumn(name = "orden")
     @Column(name = "texto", length = 500, nullable = false)
+    @BatchSize(size = 50)
     private List<String> observaciones = new ArrayList<>();
 
     // --- Decision del Coordinador (R-07, R-08) ---

@@ -7,6 +7,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import utnfc.isi.back.tpi.common.exception.ConflictoException;
@@ -24,7 +25,10 @@ import java.time.LocalDateTime;
  *   confirmar dos donaciones (D-03).
  */
 @Entity
-@Table(name = "donacion")
+@Table(name = "donacion", indexes = {
+        @Index(name = "idx_donacion_donante_id", columnList = "donante_id"),
+        @Index(name = "idx_donacion_estado", columnList = "estado")
+})
 public class Donacion {
 
     public static final String MONEDA = "ARS";
