@@ -1,6 +1,9 @@
 package utnfc.isi.back.tpi.adopciones.client;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.client.RestClient;
@@ -27,12 +30,29 @@ public class GeorefClient {
     private static final Logger log = LoggerFactory.getLogger(GeorefClient.class);
 
     private final RestClient restClient;
+    private final CircuitBreaker circuitBreaker;
 
     public GeorefClient(RestClient restClient) {
+        this(restClient, CircuitBreaker.of("georef", CircuitBreakerConfig.custom()
+                .recordExceptions(ServicioNoDisponibleException.class)
+                .build()));
+    }
+
+    public GeorefClient(RestClient restClient, CircuitBreaker circuitBreaker) {
         this.restClient = restClient;
+        this.circuitBreaker = circuitBreaker;
     }
 
     public Optional<Coordenadas> geolocalizar(String direccion, String localidad, String provincia) {
+        try {
+            return circuitBreaker.executeSupplier(() -> consultarGeoref(direccion, localidad, provincia));
+        } catch (CallNotPermittedException e) {
+            log.warn("CircuitBreaker '{}' abierto: Georef omitido temporalmente", circuitBreaker.getName());
+            throw new ServicioNoDisponibleException("La API Georef no esta disponible temporalmente", e);
+        }
+    }
+
+    private Optional<Coordenadas> consultarGeoref(String direccion, String localidad, String provincia) {
         RespuestaDirecciones respuesta;
         try {
             respuesta = restClient.get()

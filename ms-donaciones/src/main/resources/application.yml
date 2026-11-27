@@ -32,9 +32,16 @@ donaciones:
     base-url: ${MP_BASE_URL:https://api.mercadopago.com}
     # Solo la credencial de la cuenta VENDEDORA DE PRUEBA. Nunca se versiona.
     access-token: ${MP_ACCESS_TOKEN:sin-configurar}
-    timeout: ${MP_TIMEOUT:5s}
+    connect-timeout: ${MP_CONNECT_TIMEOUT:2s}
+    read-timeout: ${MP_READ_TIMEOUT:5s}
     usar-sandbox-init-point: ${MP_USAR_SANDBOX_INIT_POINT:false}
     titulo-item: "Donacion al refugio"
+    circuit-breaker:
+      failure-rate-threshold: ${MP_CB_FAILURE_RATE:50}
+      sliding-window-size: ${MP_CB_SLIDING_WINDOW:10}
+      minimum-number-of-calls: ${MP_CB_MIN_CALLS:5}
+      wait-duration-in-open-state: ${MP_CB_WAIT_OPEN:30s}
+      permitted-number-of-calls-in-half-open-state: ${MP_CB_HALF_OPEN_CALLS:2}
 
 springdoc:
   api-docs:

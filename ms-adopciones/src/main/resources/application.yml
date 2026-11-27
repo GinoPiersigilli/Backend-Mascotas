@@ -36,15 +36,30 @@ adopciones:
   integraciones:
     animales:
       base-url: ${ANIMALES_URL:http://localhost:8081}
-      timeout: ${ANIMALES_TIMEOUT:3s}
+      connect-timeout: ${ANIMALES_CONNECT_TIMEOUT:2s}
+      read-timeout: ${ANIMALES_READ_TIMEOUT:3s}
+      circuit-breaker:
+        failure-rate-threshold: ${ANIMALES_CB_FAILURE_RATE:50}
+        sliding-window-size: ${ANIMALES_CB_SLIDING_WINDOW:10}
+        minimum-number-of-calls: ${ANIMALES_CB_MIN_CALLS:5}
+        wait-duration-in-open-state: ${ANIMALES_CB_WAIT_OPEN:15s}
+        permitted-number-of-calls-in-half-open-state: ${ANIMALES_CB_HALF_OPEN_CALLS:2}
     keycloak:
       token-uri: ${KEYCLOAK_TOKEN_URI:http://localhost:8180/realms/adopciones/protocol/openid-connect/token}
       client-id: ${ADOPCIONES_SERVICE_CLIENT_ID:adopciones-service}
       client-secret: ${ADOPCIONES_SERVICE_CLIENT_SECRET:cambiar}
-      timeout: ${KEYCLOAK_TIMEOUT:3s}
+      connect-timeout: ${KEYCLOAK_CONNECT_TIMEOUT:2s}
+      read-timeout: ${KEYCLOAK_READ_TIMEOUT:3s}
     georef:
       base-url: ${GEOREF_BASE_URL:https://apis.datos.gob.ar/georef/api/v2.0}
-      timeout: ${GEOREF_TIMEOUT:4s}
+      connect-timeout: ${GEOREF_CONNECT_TIMEOUT:2s}
+      read-timeout: ${GEOREF_READ_TIMEOUT:4s}
+      circuit-breaker:
+        failure-rate-threshold: ${GEOREF_CB_FAILURE_RATE:50}
+        sliding-window-size: ${GEOREF_CB_SLIDING_WINDOW:10}
+        minimum-number-of-calls: ${GEOREF_CB_MIN_CALLS:5}
+        wait-duration-in-open-state: ${GEOREF_CB_WAIT_OPEN:30s}
+        permitted-number-of-calls-in-half-open-state: ${GEOREF_CB_HALF_OPEN_CALLS:2}
   tareas:
     habilitadas: ${TAREAS_HABILITADAS:true}
     intervalo-ms: ${VENCIMIENTOS_INTERVALO_MS:300000}

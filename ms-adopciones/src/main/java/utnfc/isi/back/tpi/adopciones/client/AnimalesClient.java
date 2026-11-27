@@ -1,5 +1,8 @@
 package utnfc.isi.back.tpi.adopciones.client;
 
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -13,6 +16,7 @@ import utnfc.isi.back.tpi.common.exception.RecursoNoEncontradoException;
 import utnfc.isi.back.tpi.common.exception.ServicioNoDisponibleException;
 
 import java.util.Map;
+import java.util.function.Supplier;
 
 /**
  * Cliente de la API interna de ms-animales (CONTRATOS.md, seccion 6.2).
@@ -28,10 +32,18 @@ public class AnimalesClient {
 
     private final RestClient restClient;
     private final ServiceTokenProvider tokenProvider;
+    private final CircuitBreaker circuitBreaker;
 
     public AnimalesClient(RestClient restClient, ServiceTokenProvider tokenProvider) {
+        this(restClient, tokenProvider, CircuitBreaker.of("animales", CircuitBreakerConfig.custom()
+                .recordExceptions(ServicioNoDisponibleException.class)
+                .build()));
+    }
+
+    public AnimalesClient(RestClient restClient, ServiceTokenProvider tokenProvider, CircuitBreaker circuitBreaker) {
         this.restClient = restClient;
         this.tokenProvider = tokenProvider;
+        this.circuitBreaker = circuitBreaker;
     }
 
     /**
@@ -43,6 +55,10 @@ public class AnimalesClient {
     }
 
     public AnimalDto obtener(Long animalId) {
+        return ejecutarConCircuito(() -> consultarAnimal(animalId));
+    }
+
+    private AnimalDto consultarAnimal(Long animalId) {
         try {
             AnimalDto animal = restClient.get()
                     .uri("/internal/animales/{id}", animalId)
@@ -63,6 +79,10 @@ public class AnimalesClient {
 
     /** Pide a Animales una transicion de estado; Animales decide si es valida. */
     public AnimalDto cambiarEstado(Long animalId, EstadoAnimal nuevoEstado) {
+        return ejecutarConCircuito(() -> solicitarCambioDeEstado(animalId, nuevoEstado));
+    }
+
+    private AnimalDto solicitarCambioDeEstado(Long animalId, EstadoAnimal nuevoEstado) {
         try {
             AnimalDto animal = restClient.put()
                     .uri("/internal/animales/{id}/estado", animalId)
@@ -78,6 +98,15 @@ public class AnimalesClient {
         } catch (RestClientException e) {
             log.warn("Animales no responde al cambiar el estado del animal {}: {}", animalId, e.getMessage());
             throw new ServicioNoDisponibleException("El servicio de Animales no responde", e);
+        }
+    }
+
+    private <T> T ejecutarConCircuito(Supplier<T> llamada) {
+        try {
+            return circuitBreaker.executeSupplier(llamada);
+        } catch (CallNotPermittedException e) {
+            log.warn("CircuitBreaker '{}' abierto: llamada a ms-animales rechazada rapido", circuitBreaker.getName());
+            throw new ServicioNoDisponibleException("El servicio de Animales no esta disponible temporalmente", e);
         }
     }
 

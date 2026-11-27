@@ -2,6 +2,9 @@ package utnfc.isi.back.tpi.donaciones.client;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -15,6 +18,7 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 /**
  * Adaptador de la API de Mercado Pago (Checkout Pro), segun la documentacion oficial:
@@ -35,13 +39,25 @@ public class MercadoPagoClient {
 
     private final RestClient restClient;
     private final boolean usarSandboxInitPoint;
+    private final CircuitBreaker circuitBreaker;
 
     public MercadoPagoClient(RestClient restClient, boolean usarSandboxInitPoint) {
+        this(restClient, usarSandboxInitPoint, CircuitBreaker.of("mercadoPago", CircuitBreakerConfig.custom()
+                .recordExceptions(ServicioNoDisponibleException.class)
+                .build()));
+    }
+
+    public MercadoPagoClient(RestClient restClient, boolean usarSandboxInitPoint, CircuitBreaker circuitBreaker) {
         this.restClient = restClient;
         this.usarSandboxInitPoint = usarSandboxInitPoint;
+        this.circuitBreaker = circuitBreaker;
     }
 
     public Cobro crearCobro(String referencia, BigDecimal monto, String titulo) {
+        return ejecutarConCircuito(() -> solicitarPreferencia(referencia, monto, titulo));
+    }
+
+    private Cobro solicitarPreferencia(String referencia, BigDecimal monto, String titulo) {
         Map<String, Object> cuerpo = Map.of(
                 "items", List.of(Map.of(
                         "id", "donacion",
@@ -75,6 +91,10 @@ public class MercadoPagoClient {
 
     /** Devuelve el pago aprobado asociado a la referencia, si existe. */
     public Optional<String> buscarPagoAprobado(String referencia) {
+        return ejecutarConCircuito(() -> consultarPagos(referencia));
+    }
+
+    private Optional<String> consultarPagos(String referencia) {
         BusquedaPagos busqueda;
         try {
             busqueda = restClient.get()
@@ -99,6 +119,15 @@ public class MercadoPagoClient {
                 .filter(p -> APROBADO.equals(p.status()) && p.id() != null)
                 .map(p -> String.valueOf(p.id()))
                 .findFirst();
+    }
+
+    private <T> T ejecutarConCircuito(Supplier<T> llamada) {
+        try {
+            return circuitBreaker.executeSupplier(llamada);
+        } catch (CallNotPermittedException e) {
+            log.warn("CircuitBreaker '{}' abierto: llamada a Mercado Pago rechazada rapido", circuitBreaker.getName());
+            throw new ServicioNoDisponibleException("Mercado Pago no esta disponible temporalmente", e);
+        }
     }
 
     private static void registrarRechazo(String operacion, RestClientResponseException e) {

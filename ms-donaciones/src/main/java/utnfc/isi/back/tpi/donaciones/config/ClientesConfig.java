@@ -1,16 +1,23 @@
 package utnfc.isi.back.tpi.donaciones.config;
 
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
+import utnfc.isi.back.tpi.common.exception.ServicioNoDisponibleException;
 import utnfc.isi.back.tpi.donaciones.client.MercadoPagoClient;
 
 import java.time.Clock;
 
 @Configuration
 public class ClientesConfig {
+
+    private static final Logger log = LoggerFactory.getLogger(ClientesConfig.class);
 
     @Bean
     Clock clock() {
@@ -21,13 +28,24 @@ public class ClientesConfig {
     MercadoPagoClient mercadoPagoClient(DonacionesProperties props) {
         DonacionesProperties.MercadoPago mp = props.mercadoPago();
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(mp.timeout());
-        factory.setReadTimeout(mp.timeout());
+        factory.setConnectTimeout(mp.connectTimeout());
+        factory.setReadTimeout(mp.readTimeout());
         RestClient restClient = RestClient.builder()
                 .baseUrl(mp.baseUrl())
                 .requestFactory(factory)
                 .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + mp.accessToken())
                 .build();
-        return new MercadoPagoClient(restClient, mp.usarSandboxInitPoint());
+        DonacionesProperties.Circuito cfg = mp.circuitBreaker();
+        CircuitBreaker cb = CircuitBreaker.of("mercadoPago", CircuitBreakerConfig.custom()
+                .failureRateThreshold(cfg.failureRateThreshold())
+                .slidingWindowSize(cfg.slidingWindowSize())
+                .minimumNumberOfCalls(cfg.minimumNumberOfCalls())
+                .waitDurationInOpenState(cfg.waitDurationInOpenState())
+                .permittedNumberOfCallsInHalfOpenState(cfg.permittedNumberOfCallsInHalfOpenState())
+                .recordExceptions(ServicioNoDisponibleException.class)
+                .build());
+        cb.getEventPublisher().onStateTransition(ev ->
+                log.warn("CircuitBreaker 'mercadoPago': {}", ev.getStateTransition()));
+        return new MercadoPagoClient(restClient, mp.usarSandboxInitPoint(), cb);
     }
 }
