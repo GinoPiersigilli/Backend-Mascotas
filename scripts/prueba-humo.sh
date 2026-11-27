@@ -1,5 +1,5 @@
 #!/bin/bash
-# Prueba de humo del proceso central a traves del Gateway (requiere bash, curl y python3).
+# Prueba de humo del proceso central a traves del Gateway (requiere bash y curl).
 #
 # Uso con el despliegue de Docker Compose (obtiene los tokens de Keycloak):
 #   DEMO_USERS_PASSWORD=<la del .env> ./scripts/prueba-humo.sh
@@ -10,14 +10,28 @@
 # control final sin esperar, PERIODO_ADAPTACION_DIAS=0. Termina con codigo 1 ante el primer fallo.
 set -uo pipefail
 
+if [ -z "${DEMO_USERS_PASSWORD:-}" ] && [ -f .env ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . <(tr -d '\r' < .env)
+  set +a
+fi
+
 GATEWAY="${GATEWAY:-http://localhost:8080}"
 KEYCLOAK="${KEYCLOAK:-http://localhost:8180}"
 FALLOS=0
 
+extraer_json() {
+  local clave="$1"
+  grep -oE "\"${clave}\"[[:space:]]*:[[:space:]]*(\[[^]]*\]|\"[^\"]*\"|[^,}[:space:]]+)" \
+    | head -n 1 \
+    | sed -E 's/^"[^"]*"[[:space:]]*:[[:space:]]*//; s/^"//; s/"$//'
+}
+
 token() {
   curl -s -X POST "$KEYCLOAK/realms/adopciones/protocol/openid-connect/token" \
     -d grant_type=password -d client_id=tpi-client -d username="$1" -d password="$DEMO_USERS_PASSWORD" \
-    | python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])'
+    | extraer_json "access_token"
 }
 
 if [ -z "${TOKEN_ADOPTANTE1:-}" ]; then
@@ -36,7 +50,18 @@ llamar() {
   CUERPO=$(cat /tmp/tpi_resp.json)
 }
 
-campo() { echo "$CUERPO" | python3 -c 'import sys,json; d=json.load(sys.stdin); print(eval("d"+sys.argv[1]))' "$1"; }
+campo() {
+  case "$1" in
+    ".__len__()")
+      echo "$CUERPO" | grep -o '"estadoNuevo"[[:space:]]*:' | wc -l | tr -d '[:space:]'
+      ;;
+    *)
+      local k="${1#\[\'}"
+      k="${k%\'\]}"
+      echo "$CUERPO" | extraer_json "$k"
+      ;;
+  esac
+}
 
 esperar() {
   if [ "$CODIGO" = "$1" ]; then echo "  OK   $2 -> $CODIGO"; else echo "  FALLO $2 -> $CODIGO (esperado $1): $CUERPO"; FALLOS=$((FALLOS+1)); fi

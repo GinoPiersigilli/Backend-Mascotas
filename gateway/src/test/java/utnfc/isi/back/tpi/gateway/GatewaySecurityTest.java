@@ -14,7 +14,7 @@ import static org.springframework.security.test.web.reactive.server.SecurityMock
  * Security Filter y enrutamiento del Gateway. Los servicios apuntan a un puerto cerrado para
  * comprobar, ademas, que una caida interna se informa como 503 con el formato unico.
  */
-@SpringBootTest
+@SpringBootTest(classes = GatewayApplication.class)
 @AutoConfigureWebTestClient
 @TestPropertySource(properties = {
         "ANIMALES_URL=http://127.0.0.1:1",
