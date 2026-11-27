@@ -81,17 +81,31 @@ public class Animal {
     /** Alta de un animal: siempre empieza DISPONIBLE (P1). */
     public Animal(String nombre, Especie especie, int edadMeses, Tamanio tamanio, String necesidadesEspeciales,
                   boolean aptoNinios, boolean aptoOtrosAnimales, boolean requiereEspacioExterior) {
+        this(nombre, especie, edadMeses, tamanio, necesidadesEspeciales,
+                aptoNinios, aptoOtrosAnimales, requiereEspacioExterior, LocalDateTime.now());
+    }
+
+    /** Alta de un animal con fecha explicita (inyectada via Clock desde el servicio). */
+    public Animal(String nombre, Especie especie, int edadMeses, Tamanio tamanio, String necesidadesEspeciales,
+                  boolean aptoNinios, boolean aptoOtrosAnimales, boolean requiereEspacioExterior, LocalDateTime ahora) {
         actualizarDatos(nombre, especie, edadMeses, tamanio, necesidadesEspeciales,
-                aptoNinios, aptoOtrosAnimales, requiereEspacioExterior);
+                aptoNinios, aptoOtrosAnimales, requiereEspacioExterior, ahora);
         this.estado = EstadoAnimal.DISPONIBLE;
-        this.fechaAlta = LocalDateTime.now();
-        this.fechaActualizacion = this.fechaAlta;
+        this.fechaAlta = ahora;
+        this.fechaActualizacion = ahora;
     }
 
     /** Modifica los datos descriptivos. No toca el estado: para eso estan los metodos de abajo. */
     public void actualizarDatos(String nombre, Especie especie, int edadMeses, Tamanio tamanio,
                                 String necesidadesEspeciales, boolean aptoNinios, boolean aptoOtrosAnimales,
                                 boolean requiereEspacioExterior) {
+        actualizarDatos(nombre, especie, edadMeses, tamanio, necesidadesEspeciales,
+                aptoNinios, aptoOtrosAnimales, requiereEspacioExterior, LocalDateTime.now());
+    }
+
+    public void actualizarDatos(String nombre, Especie especie, int edadMeses, Tamanio tamanio,
+                                String necesidadesEspeciales, boolean aptoNinios, boolean aptoOtrosAnimales,
+                                boolean requiereEspacioExterior, LocalDateTime ahora) {
         this.nombre = nombre == null ? null : nombre.trim();
         this.especie = especie;
         this.edadMeses = edadMeses;
@@ -101,7 +115,7 @@ public class Animal {
         this.aptoNinios = aptoNinios;
         this.aptoOtrosAnimales = aptoOtrosAnimales;
         this.requiereEspacioExterior = requiereEspacioExterior;
-        this.fechaActualizacion = LocalDateTime.now();
+        this.fechaActualizacion = ahora;
     }
 
     /**
@@ -109,12 +123,16 @@ public class Animal {
      * Solo se aceptan las transiciones de {@link EstadoAnimal#admiteTransicionDelProceso}.
      */
     public void cambiarEstadoPorProceso(EstadoAnimal destino) {
+        cambiarEstadoPorProceso(destino, LocalDateTime.now());
+    }
+
+    public void cambiarEstadoPorProceso(EstadoAnimal destino, LocalDateTime ahora) {
         if (!estado.admiteTransicionDelProceso(destino)) {
             throw new ConflictoException("Transicion invalida para el animal " + id + ": "
                     + estado + " -> " + destino);
         }
         this.estado = destino;
-        this.fechaActualizacion = LocalDateTime.now();
+        this.fechaActualizacion = ahora;
     }
 
     /**
@@ -122,6 +140,10 @@ public class Animal {
      * NO_DISPONIBLE sin resolver antes ese proceso. Un animal ADOPTADO ya salio del refugio.
      */
     public void marcarNoDisponible(String motivo) {
+        marcarNoDisponible(motivo, LocalDateTime.now());
+    }
+
+    public void marcarNoDisponible(String motivo, LocalDateTime ahora) {
         if (motivo == null || motivo.isBlank()) {
             throw new SolicitudInvalidaException("Marcar un animal como no disponible requiere un motivo");
         }
@@ -134,17 +156,21 @@ public class Animal {
         }
         this.estado = EstadoAnimal.NO_DISPONIBLE;
         this.motivoNoDisponible = motivo.trim();
-        this.fechaActualizacion = LocalDateTime.now();
+        this.fechaActualizacion = ahora;
     }
 
     /** Vuelve a publicar un animal NO_DISPONIBLE cuando se resolvio la causa. */
     public void marcarDisponible() {
+        marcarDisponible(LocalDateTime.now());
+    }
+
+    public void marcarDisponible(LocalDateTime ahora) {
         if (estado != EstadoAnimal.NO_DISPONIBLE) {
             throw new ConflictoException("Solo un animal NO_DISPONIBLE puede volver a DISPONIBLE por esta via; estado actual: " + estado);
         }
         this.estado = EstadoAnimal.DISPONIBLE;
         this.motivoNoDisponible = null;
-        this.fechaActualizacion = LocalDateTime.now();
+        this.fechaActualizacion = ahora;
     }
 
     public Long getId() {
