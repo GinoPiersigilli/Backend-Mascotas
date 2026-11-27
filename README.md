@@ -1,4 +1,6 @@
-# TPI Backend 2026 — Adopción responsable de animales
+# Adopción responsable de animales — Backend de microservicios
+
+[![CI](https://github.com/GinoPiersigilli/Backend-Mascotas/actions/workflows/ci.yml/badge.svg)](https://github.com/GinoPiersigilli/Backend-Mascotas/actions/workflows/ci.yml)
 
 Backend de microservicios (Java 21, Spring Boot 3.5) que ordena el ciclo completo de una adopción
 —desde que un animal está disponible hasta que la adopción se confirma tras un período de
@@ -6,11 +8,8 @@ adaptación— y registra las donaciones a la cuenta común de la organización.
 
 > Documentación complementaria en [`docs/`](docs): análisis y alcance ([ANALISIS.md](docs/ANALISIS.md)),
 > contratos ([CONTRATOS.md](docs/CONTRATOS.md)), API ([API.md](docs/API.md)), decisiones
-> ([ADR.md](docs/ADR.md)), patrones ([PATRONES.md](docs/PATRONES.md)), auditoría
-> ([AUDITORIA.md](docs/AUDITORIA.md)), trabajo en GitLab ([GITLAB.md](docs/GITLAB.md)),
-> defensa ([DEFENSA.md](docs/DEFENSA.md)), preguntas ([PREGUNTAS.md](docs/PREGUNTAS.md)) y
-> guías individuales ([GUIAS-ESTUDIO.md](docs/GUIAS-ESTUDIO.md)).
-> Todo integrado en un solo Word de estudio: [docs/TPI-Backend-2026-Documento-Maestro.docx](docs/TPI-Backend-2026-Documento-Maestro.docx).
+> ([ADR.md](docs/ADR.md)), patrones ([PATRONES.md](docs/PATRONES.md)) y auditoría
+> ([AUDITORIA.md](docs/AUDITORIA.md)).
 
 ## 1. Problema que resuelve
 
@@ -141,7 +140,7 @@ Editar `.env`: contraseñas, `ADOPCIONES_SERVICE_CLIENT_SECRET`, `DEMO_USERS_PAS
 ```bash
 mvn clean install
 ```
-Compila todo, ejecuta las pruebas e instala `tpi-common` en `~/.m2` (mecanismo mínimo del enunciado).
+Compila todo, ejecuta las pruebas e instala `tpi-common` en `~/.m2`.
 
 ```bash
 docker compose up --build -d
@@ -224,8 +223,6 @@ Las pruebas no requieren Docker, Keycloak ni Internet (H2 y dobles de prueba). E
 - Sin webhooks de Mercado Pago: una donación se actualiza al consultarla.
 - No hay transacción distribuida: si Animales confirma un cambio y luego falla el *commit* local (caso
   residual), queda una inconsistencia que debe corregirse a mano (ver ADR-06).
-- `start-dev` de Keycloak (HTTP, sin TLS) y cliente con *password grant*: simplificaciones de TPI.
+- `start-dev` de Keycloak (HTTP, sin TLS) y cliente con *password grant*: simplificaciones para entorno local de desarrollo.
 - La tarea programada cubre R-09; el control final vencido (R-11) se consulta filtrando
   `EN_ADAPTACION` por `fechaControl`, sin automatismo.
-- El despliegue completo con Docker Compose no pudo ejecutarse en la máquina donde se generó el
-  proyecto (sin *daemon* de Docker). Ver [AUDITORIA.md](docs/AUDITORIA.md).
