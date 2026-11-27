@@ -12,7 +12,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -22,6 +21,8 @@ import utnfc.isi.back.tpi.adopciones.client.AnimalesClient;
 import utnfc.isi.back.tpi.adopciones.client.Coordenadas;
 import utnfc.isi.back.tpi.adopciones.client.EstadoAnimal;
 import utnfc.isi.back.tpi.adopciones.client.GeorefClient;
+import utnfc.isi.back.tpi.adopciones.repository.PerfilRepository;
+import utnfc.isi.back.tpi.adopciones.repository.SolicitudRepository;
 import utnfc.isi.back.tpi.adopciones.service.TareaVencimientos;
 import utnfc.isi.back.tpi.adopciones.service.SolicitudService;
 import utnfc.isi.back.tpi.common.exception.ConflictoException;
@@ -39,6 +40,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
@@ -57,19 +59,20 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
 class FlujoAdopcionIntegrationTest {
+
+    private static final Instant FECHA_INICIAL = Instant.parse("2026-10-27T13:00:00Z");
 
     @TestConfiguration
     static class RelojDePrueba {
         @Bean
         @Primary
         RelojMovil relojMovil() {
-            return new RelojMovil(Instant.parse("2026-10-27T13:00:00Z"));
+            return new RelojMovil(FECHA_INICIAL);
         }
     }
 
-    /** Reloj que el test puede adelantar. */
+    /** Reloj que el test puede adelantar y reiniciar entre ejecuciones. */
     static class RelojMovil extends Clock {
         private Instant ahora;
 
@@ -79,6 +82,10 @@ class FlujoAdopcionIntegrationTest {
 
         void adelantar(Duration d) {
             ahora = ahora.plus(d);
+        }
+
+        void reiniciar(Instant nuevaFecha) {
+            ahora = nuevaFecha;
         }
 
         @Override
@@ -106,6 +113,12 @@ class FlujoAdopcionIntegrationTest {
     @Autowired
     private SolicitudService solicitudService;
 
+    @Autowired
+    private SolicitudRepository solicitudRepository;
+
+    @Autowired
+    private PerfilRepository perfilRepository;
+
     @MockitoBean
     private AnimalesClient animales;
 
@@ -131,6 +144,10 @@ class FlujoAdopcionIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        solicitudRepository.deleteAll();
+        perfilRepository.deleteAll();
+        reloj.reiniciar(FECHA_INICIAL);
+        reset(animales, georef);
         when(animales.obtener(1L)).thenReturn(animal(1, EstadoAnimal.DISPONIBLE, true, false));
         when(georef.geolocalizar(any(), any(), any())).thenReturn(Optional.of(new Coordenadas(-31.4096, -64.1966)));
     }
