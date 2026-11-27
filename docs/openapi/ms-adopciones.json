@@ -1,0 +1,1437 @@
+{
+  "components" : {
+    "schemas" : {
+      "Aprobar" : {
+        "properties" : {
+          "justificacion" : {
+            "example" : "El adoptante se compromete a trasladar al animal a los controles",
+            "maxLength" : 1000,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "CampoError" : {
+        "properties" : {
+          "campo" : {
+            "type" : "string"
+          },
+          "mensaje" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "ControlFinal" : {
+        "properties" : {
+          "observaciones" : {
+            "example" : "El animal se adapto bien",
+            "maxLength" : 1000,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "resultado" : {
+            "enum" : [ "CONFORME", "DESFAVORABLE" ],
+            "example" : "CONFORME",
+            "type" : "string"
+          }
+        },
+        "required" : [ "resultado" ],
+        "type" : "object"
+      },
+      "Crear" : {
+        "properties" : {
+          "animalId" : {
+            "example" : 1,
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "required" : [ "animalId" ],
+        "type" : "object"
+      },
+      "ErrorResponse" : {
+        "properties" : {
+          "error" : {
+            "type" : "string"
+          },
+          "errores" : {
+            "items" : {
+              "$ref" : "#/components/schemas/CampoError"
+            },
+            "type" : "array"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "path" : {
+            "type" : "string"
+          },
+          "status" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "timestamp" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "EventoResponse" : {
+        "properties" : {
+          "actor" : {
+            "example" : "coord-1",
+            "type" : "string"
+          },
+          "detalle" : {
+            "example" : "Solicitud aprobada",
+            "type" : "string"
+          },
+          "estadoAnterior" : {
+            "enum" : [ "PENDIENTE", "APROBADA", "RECHAZADA", "CANCELADA", "EN_ADAPTACION", "FINALIZADA", "REVERTIDA" ],
+            "example" : "PENDIENTE",
+            "type" : [ "string", "null" ]
+          },
+          "estadoNuevo" : {
+            "enum" : [ "PENDIENTE", "APROBADA", "RECHAZADA", "CANCELADA", "EN_ADAPTACION", "FINALIZADA", "REVERTIDA" ],
+            "example" : "APROBADA",
+            "type" : "string"
+          },
+          "fecha" : {
+            "example" : "2026-10-27T13:00:00",
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "Motivo" : {
+        "properties" : {
+          "motivo" : {
+            "example" : "El hogar no reune las condiciones",
+            "maxLength" : 1000,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "motivo" ],
+        "type" : "object"
+      },
+      "PerfilRequest" : {
+        "properties" : {
+          "direccion" : {
+            "description" : "Calle y altura, sin localidad",
+            "example" : "Av Colon 1000",
+            "maxLength" : 200,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "hayNinios" : {
+            "type" : "boolean"
+          },
+          "hayOtrosAnimales" : {
+            "type" : "boolean"
+          },
+          "localidad" : {
+            "example" : "Cordoba",
+            "maxLength" : 100,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "nombreCompleto" : {
+            "example" : "Ana Perez",
+            "maxLength" : 150,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "provincia" : {
+            "example" : "Cordoba",
+            "maxLength" : 100,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "telefono" : {
+            "example" : "3515550000",
+            "minLength" : 1,
+            "pattern" : "[0-9 +()-]{6,40}",
+            "type" : "string"
+          },
+          "tienePatio" : {
+            "type" : "boolean"
+          },
+          "tipoVivienda" : {
+            "enum" : [ "CASA", "DEPARTAMENTO" ],
+            "example" : "CASA",
+            "type" : "string"
+          }
+        },
+        "required" : [ "direccion", "hayNinios", "hayOtrosAnimales", "localidad", "nombreCompleto", "provincia", "telefono", "tienePatio", "tipoVivienda" ],
+        "type" : "object"
+      },
+      "PerfilResponse" : {
+        "properties" : {
+          "adoptanteId" : {
+            "example" : "adoptante-sub-1",
+            "type" : "string"
+          },
+          "direccion" : {
+            "example" : "Av Colon 1000",
+            "type" : "string"
+          },
+          "fechaActualizacion" : {
+            "example" : "2026-10-27T13:00:00",
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "hayNinios" : {
+            "example" : false,
+            "type" : "boolean"
+          },
+          "hayOtrosAnimales" : {
+            "example" : false,
+            "type" : "boolean"
+          },
+          "localidad" : {
+            "example" : "Cordoba",
+            "type" : "string"
+          },
+          "nombreCompleto" : {
+            "example" : "Ana Perez",
+            "type" : "string"
+          },
+          "provincia" : {
+            "example" : "Cordoba",
+            "type" : "string"
+          },
+          "telefono" : {
+            "example" : "3515550000",
+            "type" : "string"
+          },
+          "tienePatio" : {
+            "example" : true,
+            "type" : "boolean"
+          },
+          "tipoVivienda" : {
+            "enum" : [ "CASA", "DEPARTAMENTO" ],
+            "example" : "CASA",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "SolicitudResponse" : {
+        "properties" : {
+          "adoptanteId" : {
+            "example" : "adoptante-sub-1",
+            "type" : "string"
+          },
+          "animalId" : {
+            "example" : 1,
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "animalNombre" : {
+            "example" : "Luna",
+            "type" : "string"
+          },
+          "distanciaKm" : {
+            "example" : 2.7,
+            "format" : "double",
+            "type" : [ "number", "null" ]
+          },
+          "distanciaNoVerificada" : {
+            "example" : false,
+            "type" : "boolean"
+          },
+          "estado" : {
+            "enum" : [ "PENDIENTE", "APROBADA", "RECHAZADA", "CANCELADA", "EN_ADAPTACION", "FINALIZADA", "REVERTIDA" ],
+            "example" : "PENDIENTE",
+            "type" : "string"
+          },
+          "fechaAprobacion" : {
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          },
+          "fechaControl" : {
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          },
+          "fechaCreacion" : {
+            "example" : "2026-10-27T13:00:00",
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "fechaEntrega" : {
+            "format" : "date-time",
+            "type" : [ "string", "null" ]
+          },
+          "id" : {
+            "example" : 1,
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "justificacionExcepcion" : {
+            "type" : [ "string", "null" ]
+          },
+          "motivoCierre" : {
+            "type" : [ "string", "null" ]
+          },
+          "motivoRechazo" : {
+            "type" : [ "string", "null" ]
+          },
+          "observaciones" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "observacionesControl" : {
+            "type" : [ "string", "null" ]
+          },
+          "requiereExcepcion" : {
+            "example" : false,
+            "type" : "boolean"
+          },
+          "resultadoControl" : {
+            "enum" : [ "CONFORME", "DESFAVORABLE" ],
+            "type" : [ "string", "null" ]
+          }
+        },
+        "type" : "object"
+      }
+    },
+    "securitySchemes" : {
+      "bearer-jwt" : {
+        "bearerFormat" : "JWT",
+        "scheme" : "bearer",
+        "type" : "http"
+      }
+    }
+  },
+  "info" : {
+    "description" : "Proceso de adopcion: perfiles, solicitudes, evaluacion con Georef, entrega y seguimiento",
+    "title" : "ms-adopciones",
+    "version" : "1.0.0"
+  },
+  "openapi" : "3.1.0",
+  "paths" : {
+    "/api/adoptantes/me/perfil" : {
+      "get" : {
+        "operationId" : "obtenerPropio",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PerfilResponse"
+                }
+              }
+            },
+            "description" : "Perfil encontrado"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No autenticado"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rol insuficiente (requiere ADOPTANTE)"
+          },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Todavia no lo completo"
+          }
+        },
+        "summary" : "Consulta el perfil propio (ADOPTANTE)",
+        "tags" : [ "Perfiles" ]
+      },
+      "put" : {
+        "operationId" : "guardar",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/PerfilRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PerfilResponse"
+                }
+              }
+            },
+            "description" : "Perfil guardado"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Faltan datos o son invalidos"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No autenticado"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rol insuficiente (requiere ADOPTANTE)"
+          }
+        },
+        "summary" : "Crea o reemplaza el perfil propio (ADOPTANTE)",
+        "tags" : [ "Perfiles" ]
+      }
+    },
+    "/api/adoptantes/{adoptanteId}/perfil" : {
+      "get" : {
+        "operationId" : "obtener_1",
+        "parameters" : [ {
+          "example" : "adoptante-sub-1",
+          "in" : "path",
+          "name" : "adoptanteId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PerfilResponse"
+                }
+              }
+            },
+            "description" : "Perfil encontrado"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No autenticado"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rol insuficiente (requiere COORDINADOR)"
+          },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "El postulante no completo su perfil"
+          }
+        },
+        "summary" : "Consulta el perfil de un postulante para evaluar su solicitud (COORDINADOR)",
+        "tags" : [ "Perfiles" ]
+      }
+    },
+    "/api/solicitudes" : {
+      "get" : {
+        "operationId" : "listar",
+        "parameters" : [ {
+          "description" : "Filtrar por estado",
+          "example" : "PENDIENTE",
+          "in" : "query",
+          "name" : "estado",
+          "required" : false,
+          "schema" : {
+            "enum" : [ "PENDIENTE", "APROBADA", "RECHAZADA", "CANCELADA", "EN_ADAPTACION", "FINALIZADA", "REVERTIDA" ],
+            "type" : "string"
+          }
+        }, {
+          "description" : "Numero de pagina (base 0)",
+          "example" : 0,
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "default" : 0,
+            "format" : "int32",
+            "minimum" : 0,
+            "type" : "integer"
+          }
+        }, {
+          "description" : "Cantidad de elementos por pagina (1 a 100)",
+          "example" : 50,
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 50,
+            "format" : "int32",
+            "maximum" : 100,
+            "minimum" : 1,
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/SolicitudResponse"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "Lista de solicitudes; el encabezado X-Total-Count informa el total",
+            "headers" : {
+              "X-Total-Count" : {
+                "description" : "Cantidad total de registros",
+                "schema" : {
+                  "type" : "integer"
+                },
+                "style" : "simple"
+              }
+            }
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Parametros de filtro o paginacion invalidos"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No autenticado"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rol insuficiente"
+          }
+        },
+        "summary" : "Lista solicitudes paginadas: las propias (ADOPTANTE) o todas (COORDINADOR)",
+        "tags" : [ "Solicitudes" ]
+      },
+      "post" : {
+        "description" : "201 PENDIENTE con marcas, o 201 RECHAZADA si hay incompatibilidad dura (R-04)",
+        "operationId" : "crear",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/Crear"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SolicitudResponse"
+                }
+              }
+            },
+            "description" : "Solicitud registrada"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Datos invalidos"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No autenticado"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rol insuficiente (requiere ADOPTANTE)"
+          },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No existe el animal"
+          },
+          "409" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "R-01, R-02 o R-03"
+          },
+          "503" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "El servicio de Animales no responde"
+          }
+        },
+        "summary" : "Presenta una solicitud (ADOPTANTE). Aplica R-01 a R-06",
+        "tags" : [ "Solicitudes" ]
+      }
+    },
+    "/api/solicitudes/{id}" : {
+      "get" : {
+        "operationId" : "obtener",
+        "parameters" : [ {
+          "example" : 1,
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SolicitudResponse"
+                }
+              }
+            },
+            "description" : "Solicitud encontrada"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No autenticado"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Pertenece a otro adoptante"
+          },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No existe la solicitud"
+          }
+        },
+        "summary" : "Consulta una solicitud (duenio o COORDINADOR)",
+        "tags" : [ "Solicitudes" ]
+      }
+    },
+    "/api/solicitudes/{id}/aprobar" : {
+      "post" : {
+        "operationId" : "aprobar",
+        "parameters" : [ {
+          "example" : 1,
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/Aprobar"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SolicitudResponse"
+                }
+              }
+            },
+            "description" : "Solicitud aprobada y animal reservado"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Datos invalidos"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No autenticado"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rol insuficiente (requiere COORDINADOR)"
+          },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No existe la solicitud o el animal"
+          },
+          "409" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No esta PENDIENTE, falta justificacion, concurrencia o el animal no esta DISPONIBLE"
+          },
+          "503" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Animales no responde: la solicitud sigue PENDIENTE"
+          }
+        },
+        "summary" : "Aprueba y reserva al animal (COORDINADOR). R-07, R-08",
+        "tags" : [ "Solicitudes" ]
+      }
+    },
+    "/api/solicitudes/{id}/cancelar" : {
+      "post" : {
+        "operationId" : "cancelar",
+        "parameters" : [ {
+          "example" : 1,
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SolicitudResponse"
+                }
+              }
+            },
+            "description" : "Solicitud cancelada"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No autenticado"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Pertenece a otro adoptante o rol insuficiente"
+          },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No existe la solicitud"
+          },
+          "409" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No esta PENDIENTE o modificacion concurrente"
+          }
+        },
+        "summary" : "El adoptante cancela su solicitud PENDIENTE",
+        "tags" : [ "Solicitudes" ]
+      }
+    },
+    "/api/solicitudes/{id}/cancelar-entrega" : {
+      "post" : {
+        "operationId" : "cancelarEntrega",
+        "parameters" : [ {
+          "example" : 1,
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/Motivo"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SolicitudResponse"
+                }
+              }
+            },
+            "description" : "Entrega cancelada y animal liberado"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Falta el motivo o es invalido"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No autenticado"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rol insuficiente (requiere COORDINADOR)"
+          },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No existe la solicitud"
+          },
+          "409" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No esta APROBADA o modificacion concurrente"
+          },
+          "503" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Animales no responde"
+          }
+        },
+        "summary" : "Cancela una entrega pendiente; el animal vuelve a DISPONIBLE (COORDINADOR)",
+        "tags" : [ "Solicitudes" ]
+      }
+    },
+    "/api/solicitudes/{id}/confirmar-entrega" : {
+      "post" : {
+        "operationId" : "confirmarEntrega",
+        "parameters" : [ {
+          "example" : 1,
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SolicitudResponse"
+                }
+              }
+            },
+            "description" : "Entrega confirmada"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No autenticado"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rol insuficiente (requiere COORDINADOR)"
+          },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No existe la solicitud"
+          },
+          "409" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No esta APROBADA o el plazo de entrega vencio (R-09)"
+          },
+          "503" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Animales no responde"
+          }
+        },
+        "summary" : "Confirma la entrega; animal y solicitud pasan a EN_ADAPTACION (COORDINADOR). R-09, R-10",
+        "tags" : [ "Solicitudes" ]
+      }
+    },
+    "/api/solicitudes/{id}/control-final" : {
+      "post" : {
+        "operationId" : "controlFinal",
+        "parameters" : [ {
+          "example" : 1,
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ControlFinal"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SolicitudResponse"
+                }
+              }
+            },
+            "description" : "Control final registrado"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Datos invalidos o faltan observaciones en control desfavorable"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No autenticado"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rol insuficiente (requiere COORDINADOR)"
+          },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No existe la solicitud"
+          },
+          "409" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Anterior a la fecha de control o no esta EN_ADAPTACION"
+          },
+          "503" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Animales no responde"
+          }
+        },
+        "summary" : "Registra el control final (COORDINADOR). R-11, R-12",
+        "tags" : [ "Solicitudes" ]
+      }
+    },
+    "/api/solicitudes/{id}/devolucion" : {
+      "post" : {
+        "operationId" : "devolucion",
+        "parameters" : [ {
+          "example" : 1,
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/Motivo"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SolicitudResponse"
+                }
+              }
+            },
+            "description" : "Devolucion registrada y animal liberado"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Falta el motivo o es invalido"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No autenticado"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Pertenece a otro adoptante o rol insuficiente"
+          },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No existe la solicitud"
+          },
+          "409" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No esta EN_ADAPTACION o modificacion concurrente"
+          },
+          "503" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Animales no responde"
+          }
+        },
+        "summary" : "El adoptante devuelve al animal durante la adaptacion. R-12",
+        "tags" : [ "Solicitudes" ]
+      }
+    },
+    "/api/solicitudes/{id}/historial" : {
+      "get" : {
+        "operationId" : "historial",
+        "parameters" : [ {
+          "example" : 1,
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/EventoResponse"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "Historial de eventos"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No autenticado"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Pertenece a otro adoptante"
+          },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No existe la solicitud"
+          }
+        },
+        "summary" : "Historial de cambios de estado con fecha, actor y motivo (duenio o COORDINADOR)",
+        "tags" : [ "Solicitudes" ]
+      }
+    },
+    "/api/solicitudes/{id}/rechazar" : {
+      "post" : {
+        "operationId" : "rechazar",
+        "parameters" : [ {
+          "example" : 1,
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/Motivo"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SolicitudResponse"
+                }
+              }
+            },
+            "description" : "Solicitud rechazada"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Falta el motivo o es invalido"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No autenticado"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rol insuficiente (requiere COORDINADOR)"
+          },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No existe la solicitud"
+          },
+          "409" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No esta PENDIENTE o modificacion concurrente"
+          }
+        },
+        "summary" : "Rechaza con motivo obligatorio (COORDINADOR). R-08",
+        "tags" : [ "Solicitudes" ]
+      }
+    }
+  },
+  "security" : [ {
+    "bearer-jwt" : [ ]
+  } ],
+  "servers" : [ {
+    "description" : "Generated server url",
+    "url" : "http://localhost"
+  } ],
+  "tags" : [ {
+    "description" : "Presentacion, evaluacion, entrega y seguimiento (P2 a P4)",
+    "name" : "Solicitudes"
+  }, {
+    "description" : "Perfil y condiciones del hogar del adoptante (R-03)",
+    "name" : "Perfiles"
+  } ]
+}

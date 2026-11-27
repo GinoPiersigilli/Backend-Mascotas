@@ -1,6 +1,9 @@
 package utnfc.isi.back.tpi.adopciones.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -14,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import utnfc.isi.back.tpi.adopciones.dto.PerfilRequest;
 import utnfc.isi.back.tpi.adopciones.dto.PerfilResponse;
 import utnfc.isi.back.tpi.adopciones.service.PerfilService;
+import utnfc.isi.back.tpi.common.error.ErrorResponse;
 
 /**
  * Perfil del adoptante. El duenio se toma SIEMPRE del token ("me"), nunca de la URL ni del
@@ -32,21 +36,40 @@ public class PerfilController {
 
     @PutMapping("/me/perfil")
     @Operation(summary = "Crea o reemplaza el perfil propio (ADOPTANTE)")
-    @ApiResponse(responseCode = "400", description = "Faltan datos o son invalidos")
+    @ApiResponse(responseCode = "200", description = "Perfil guardado")
+    @ApiResponse(responseCode = "400", description = "Faltan datos o son invalidos",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "401", description = "No autenticado",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "403", description = "Rol insuficiente (requiere ADOPTANTE)",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = ErrorResponse.class)))
     public PerfilResponse guardar(JwtAuthenticationToken auth, @Valid @RequestBody PerfilRequest request) {
         return service.guardar(auth.getToken().getSubject(), request);
     }
 
     @GetMapping("/me/perfil")
     @Operation(summary = "Consulta el perfil propio (ADOPTANTE)")
-    @ApiResponse(responseCode = "404", description = "Todavia no lo completo")
+    @ApiResponse(responseCode = "200", description = "Perfil encontrado")
+    @ApiResponse(responseCode = "401", description = "No autenticado",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "403", description = "Rol insuficiente (requiere ADOPTANTE)",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "404", description = "Todavia no lo completo",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = ErrorResponse.class)))
     public PerfilResponse obtenerPropio(JwtAuthenticationToken auth) {
         return service.obtener(auth.getToken().getSubject());
     }
 
     @GetMapping("/{adoptanteId}/perfil")
     @Operation(summary = "Consulta el perfil de un postulante para evaluar su solicitud (COORDINADOR)")
-    public PerfilResponse obtener(@PathVariable String adoptanteId) {
+    @ApiResponse(responseCode = "200", description = "Perfil encontrado")
+    @ApiResponse(responseCode = "401", description = "No autenticado",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "403", description = "Rol insuficiente (requiere COORDINADOR)",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "404", description = "El postulante no completo su perfil",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = ErrorResponse.class)))
+    public PerfilResponse obtener(@Parameter(example = "adoptante-sub-1") @PathVariable String adoptanteId) {
         return service.obtener(adoptanteId);
     }
 }

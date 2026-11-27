@@ -1,5 +1,6 @@
 package utnfc.isi.back.tpi.adopciones.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import utnfc.isi.back.tpi.adopciones.model.EstadoSolicitud;
 import utnfc.isi.back.tpi.adopciones.model.ResultadoControl;
 import utnfc.isi.back.tpi.adopciones.model.Solicitud;
@@ -13,24 +14,24 @@ import java.util.List;
  * Agrega a lo acordado animalNombre, observacionesControl y motivoCierre (trazabilidad).
  */
 public record SolicitudResponse(
-        Long id,
-        Long animalId,
-        String animalNombre,
-        String adoptanteId,
-        EstadoSolicitud estado,
-        LocalDateTime fechaCreacion,
-        Double distanciaKm,
-        boolean requiereExcepcion,
-        boolean distanciaNoVerificada,
+        @Schema(example = "1") Long id,
+        @Schema(example = "1") Long animalId,
+        @Schema(example = "Luna") String animalNombre,
+        @Schema(example = "adoptante-sub-1") String adoptanteId,
+        @Schema(example = "PENDIENTE") EstadoSolicitud estado,
+        @Schema(example = "2026-10-27T13:00:00") LocalDateTime fechaCreacion,
+        @Schema(example = "2.7", nullable = true) Double distanciaKm,
+        @Schema(example = "false") boolean requiereExcepcion,
+        @Schema(example = "false") boolean distanciaNoVerificada,
         List<String> observaciones,
-        String motivoRechazo,
-        String justificacionExcepcion,
-        LocalDateTime fechaAprobacion,
-        LocalDateTime fechaEntrega,
-        LocalDateTime fechaControl,
-        ResultadoControl resultadoControl,
-        String observacionesControl,
-        String motivoCierre) {
+        @Schema(nullable = true) String motivoRechazo,
+        @Schema(nullable = true) String justificacionExcepcion,
+        @Schema(nullable = true) LocalDateTime fechaAprobacion,
+        @Schema(nullable = true) LocalDateTime fechaEntrega,
+        @Schema(nullable = true) LocalDateTime fechaControl,
+        @Schema(nullable = true) ResultadoControl resultadoControl,
+        @Schema(nullable = true) String observacionesControl,
+        @Schema(nullable = true) String motivoCierre) {
 
     public static SolicitudResponse desde(Solicitud s) {
         return new SolicitudResponse(s.getId(), s.getAnimalId(), s.getAnimalNombre(), s.getAdoptanteId(),

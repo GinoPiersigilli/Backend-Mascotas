@@ -73,7 +73,7 @@ Ejemplo real (verificación local del 27/10/2026, Georef en vivo):
 
 | Método y ruta | Rol | Cuerpo | Respuestas |
 |---|---|---|---|
-| `POST /api/donaciones` | ADOPTANTE | `{"monto": 500}` | 201 con `linkPago`, 400 (D-01 o validación), 503 Mercado Pago |
+| `POST /api/donaciones` | ADOPTANTE | `{"monto": 500}` (header opcional `Idempotency-Key`, máx. 128 chars) | 201 con `linkPago`, 400 (D-01 o validación), 409 (`Idempotency-Key` con distinto monto, ADR-18), 503 Mercado Pago |
 | `GET /api/donaciones?page=0&size=50` | ADOPTANTE (propias), COORDINADOR (todas) | — | 200 lista + `X-Total-Count`, 400 |
 | `GET /api/donaciones/{id}` | dueño o COORDINADOR | — | 200 (si PENDIENTE consulta el pago), 403, 404 |
 | `GET /api/donaciones/total` | COORDINADOR | — | 200 `{"totalConfirmado","cantidad"}` |
@@ -89,3 +89,10 @@ Ejemplo real (verificación local del 27/10/2026, Georef en vivo):
 | Mercado Pago | `POST https://api.mercadopago.com/checkout/preferences` | `id`, `init_point` → `linkPago` | 503 y no se guarda la donación |
 | Mercado Pago | `GET https://api.mercadopago.com/v1/payments/search?external_reference=` | `results[].status == "approved"` → CONFIRMADA (D-02) | queda PENDIENTE con `verificado=false` |
 | Keycloak | `POST /realms/adopciones/protocol/openid-connect/token` (client credentials) | token SERVICIO | 503 |
+
+## Especificaciones OpenAPI exportadas
+
+Las especificaciones OpenAPI 3 de cada servicio se versionan y verifican en el build (`mvn -B test -Pexport-openapi -Dtest=OpenApiExportTest`):
+- [docs/openapi/ms-animales.json](openapi/ms-animales.json)
+- [docs/openapi/ms-adopciones.json](openapi/ms-adopciones.json)
+- [docs/openapi/ms-donaciones.json](openapi/ms-donaciones.json)

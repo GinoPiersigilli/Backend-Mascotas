@@ -1,0 +1,810 @@
+{
+  "components" : {
+    "schemas" : {
+      "AnimalRequest" : {
+        "properties" : {
+          "aptoNinios" : {
+            "type" : "boolean"
+          },
+          "aptoOtrosAnimales" : {
+            "type" : "boolean"
+          },
+          "edadMeses" : {
+            "example" : 24,
+            "format" : "int32",
+            "maximum" : 400,
+            "type" : "integer"
+          },
+          "especie" : {
+            "enum" : [ "PERRO", "GATO", "OTRO" ],
+            "example" : "PERRO",
+            "type" : "string"
+          },
+          "necesidadesEspeciales" : {
+            "example" : "Ninguna",
+            "maxLength" : 500,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "nombre" : {
+            "example" : "Luna",
+            "maxLength" : 100,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "requiereEspacioExterior" : {
+            "type" : "boolean"
+          },
+          "tamanio" : {
+            "enum" : [ "PEQUENIO", "MEDIANO", "GRANDE" ],
+            "example" : "MEDIANO",
+            "type" : "string"
+          }
+        },
+        "required" : [ "aptoNinios", "aptoOtrosAnimales", "edadMeses", "especie", "nombre", "requiereEspacioExterior", "tamanio" ],
+        "type" : "object"
+      },
+      "AnimalResponse" : {
+        "properties" : {
+          "aptoNinios" : {
+            "example" : true,
+            "type" : "boolean"
+          },
+          "aptoOtrosAnimales" : {
+            "example" : true,
+            "type" : "boolean"
+          },
+          "edadMeses" : {
+            "example" : 24,
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "especie" : {
+            "enum" : [ "PERRO", "GATO", "OTRO" ],
+            "example" : "PERRO",
+            "type" : "string"
+          },
+          "estado" : {
+            "enum" : [ "DISPONIBLE", "RESERVADO", "EN_ADAPTACION", "ADOPTADO", "NO_DISPONIBLE" ],
+            "example" : "DISPONIBLE",
+            "type" : "string"
+          },
+          "id" : {
+            "example" : 1,
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "motivoNoDisponible" : {
+            "example" : "Tratamiento veterinario",
+            "type" : [ "string", "null" ]
+          },
+          "necesidadesEspeciales" : {
+            "example" : "Ninguna",
+            "type" : [ "string", "null" ]
+          },
+          "nombre" : {
+            "example" : "Luna",
+            "type" : "string"
+          },
+          "requiereEspacioExterior" : {
+            "example" : false,
+            "type" : "boolean"
+          },
+          "tamanio" : {
+            "enum" : [ "PEQUENIO", "MEDIANO", "GRANDE" ],
+            "example" : "MEDIANO",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "CambioEstadoRequest" : {
+        "properties" : {
+          "nuevoEstado" : {
+            "enum" : [ "DISPONIBLE", "RESERVADO", "EN_ADAPTACION", "ADOPTADO", "NO_DISPONIBLE" ],
+            "example" : "RESERVADO",
+            "type" : "string"
+          }
+        },
+        "required" : [ "nuevoEstado" ],
+        "type" : "object"
+      },
+      "CampoError" : {
+        "properties" : {
+          "campo" : {
+            "type" : "string"
+          },
+          "mensaje" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "ErrorResponse" : {
+        "properties" : {
+          "error" : {
+            "type" : "string"
+          },
+          "errores" : {
+            "items" : {
+              "$ref" : "#/components/schemas/CampoError"
+            },
+            "type" : "array"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "path" : {
+            "type" : "string"
+          },
+          "status" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "timestamp" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "MotivoRequest" : {
+        "properties" : {
+          "motivo" : {
+            "example" : "Tratamiento veterinario",
+            "maxLength" : 500,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "motivo" ],
+        "type" : "object"
+      }
+    },
+    "securitySchemes" : {
+      "bearer-jwt" : {
+        "bearerFormat" : "JWT",
+        "scheme" : "bearer",
+        "type" : "http"
+      }
+    }
+  },
+  "info" : {
+    "description" : "Catalogo de animales del refugio y maquina de estados del animal",
+    "title" : "ms-animales",
+    "version" : "1.0.0"
+  },
+  "openapi" : "3.1.0",
+  "paths" : {
+    "/api/animales" : {
+      "get" : {
+        "operationId" : "listar",
+        "parameters" : [ {
+          "description" : "Filtrar por estado",
+          "example" : "DISPONIBLE",
+          "in" : "query",
+          "name" : "estado",
+          "required" : false,
+          "schema" : {
+            "enum" : [ "DISPONIBLE", "RESERVADO", "EN_ADAPTACION", "ADOPTADO", "NO_DISPONIBLE" ],
+            "type" : "string"
+          }
+        }, {
+          "description" : "Filtrar por especie",
+          "example" : "PERRO",
+          "in" : "query",
+          "name" : "especie",
+          "required" : false,
+          "schema" : {
+            "enum" : [ "PERRO", "GATO", "OTRO" ],
+            "type" : "string"
+          }
+        }, {
+          "description" : "Numero de pagina (base 0)",
+          "example" : 0,
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "default" : 0,
+            "format" : "int32",
+            "minimum" : 0,
+            "type" : "integer"
+          }
+        }, {
+          "description" : "Cantidad de elementos por pagina (1 a 100)",
+          "example" : 50,
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 50,
+            "format" : "int32",
+            "maximum" : 100,
+            "minimum" : 1,
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/AnimalResponse"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "Lista de animales; el encabezado X-Total-Count informa el total",
+            "headers" : {
+              "X-Total-Count" : {
+                "description" : "Cantidad total de registros",
+                "schema" : {
+                  "type" : "integer"
+                },
+                "style" : "simple"
+              }
+            }
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Parametros de filtro o paginacion invalidos"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No autenticado"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rol insuficiente"
+          }
+        },
+        "summary" : "Lista animales paginados, con filtros opcionales por estado y especie",
+        "tags" : [ "Animales" ]
+      },
+      "post" : {
+        "operationId" : "crear",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/AnimalRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AnimalResponse"
+                }
+              }
+            },
+            "description" : "Animal creado"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Datos invalidos"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No autenticado"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rol insuficiente (requiere COORDINADOR)"
+          }
+        },
+        "summary" : "Alta de un animal (COORDINADOR). Queda DISPONIBLE",
+        "tags" : [ "Animales" ]
+      }
+    },
+    "/api/animales/{id}" : {
+      "get" : {
+        "operationId" : "obtener",
+        "parameters" : [ {
+          "example" : 1,
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AnimalResponse"
+                }
+              }
+            },
+            "description" : "Animal encontrado"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No autenticado"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rol insuficiente"
+          },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No existe el animal"
+          }
+        },
+        "summary" : "Consulta un animal",
+        "tags" : [ "Animales" ]
+      },
+      "put" : {
+        "operationId" : "actualizar",
+        "parameters" : [ {
+          "example" : 1,
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/AnimalRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AnimalResponse"
+                }
+              }
+            },
+            "description" : "Animal actualizado"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Datos invalidos"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No autenticado"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rol insuficiente (requiere COORDINADOR)"
+          },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No existe el animal"
+          },
+          "409" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Modificacion concurrente (@Version)"
+          }
+        },
+        "summary" : "Modifica los datos de un animal (COORDINADOR). No cambia su estado",
+        "tags" : [ "Animales" ]
+      }
+    },
+    "/api/animales/{id}/marcar-disponible" : {
+      "post" : {
+        "operationId" : "marcarDisponible",
+        "parameters" : [ {
+          "example" : 1,
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AnimalResponse"
+                }
+              }
+            },
+            "description" : "Animal devuelto a DISPONIBLE"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No autenticado"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rol insuficiente (requiere COORDINADOR)"
+          },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No existe el animal"
+          },
+          "409" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "El animal no esta NO_DISPONIBLE"
+          }
+        },
+        "summary" : "Devuelve a DISPONIBLE un animal NO_DISPONIBLE (COORDINADOR)",
+        "tags" : [ "Animales" ]
+      }
+    },
+    "/api/animales/{id}/marcar-no-disponible" : {
+      "post" : {
+        "operationId" : "marcarNoDisponible",
+        "parameters" : [ {
+          "example" : 1,
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/MotivoRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AnimalResponse"
+                }
+              }
+            },
+            "description" : "Animal marcado como NO_DISPONIBLE"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Falta el motivo o es invalido"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No autenticado"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rol insuficiente (requiere COORDINADOR)"
+          },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No existe el animal"
+          },
+          "409" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Tiene una adopcion en curso (R-13) o no esta DISPONIBLE"
+          }
+        },
+        "summary" : "Deja al animal NO_DISPONIBLE con motivo (COORDINADOR)",
+        "tags" : [ "Animales" ]
+      }
+    },
+    "/internal/animales/{id}" : {
+      "get" : {
+        "operationId" : "obtener_1",
+        "parameters" : [ {
+          "example" : 1,
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AnimalResponse"
+                }
+              }
+            },
+            "description" : "Animal encontrado"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No autenticado"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Requiere rol SERVICIO"
+          },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No existe el animal"
+          }
+        },
+        "summary" : "Estado y aptitudes del animal (R-01, R-04, R-05)",
+        "tags" : [ "Interna" ]
+      }
+    },
+    "/internal/animales/{id}/estado" : {
+      "put" : {
+        "operationId" : "cambiarEstado",
+        "parameters" : [ {
+          "example" : 1,
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CambioEstadoRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AnimalResponse"
+                }
+              }
+            },
+            "description" : "Transicion aplicada"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Estado invalido"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No autenticado"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Requiere rol SERVICIO"
+          },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No existe el animal"
+          },
+          "409" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "La transicion no es valida desde el estado actual o concurrencia"
+          }
+        },
+        "summary" : "Transicion de estado pedida por el proceso de adopcion",
+        "tags" : [ "Interna" ]
+      }
+    }
+  },
+  "security" : [ {
+    "bearer-jwt" : [ ]
+  } ],
+  "servers" : [ {
+    "description" : "Generated server url",
+    "url" : "http://localhost"
+  } ],
+  "tags" : [ {
+    "description" : "Catalogo de animales y su disponibilidad (P1)",
+    "name" : "Animales"
+  }, {
+    "description" : "Uso exclusivo del servicio de Adopciones (rol SERVICIO)",
+    "name" : "Interna"
+  } ]
+}

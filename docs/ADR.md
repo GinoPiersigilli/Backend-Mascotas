@@ -157,3 +157,27 @@ Formato: contexto → alternativas → decisión → consecuencias → evidencia
   - **Saga ligera sobre PostgreSQL (c)** reutiliza el stack existente (esquemas versionados con Flyway de ADR-08, `RestClient` + `CircuitBreaker` de ADR-16 y el patrón `@Scheduled` de `TareaVencimientos`) **sin introducir Kafka ni RabbitMQ**, preserva intacto el contrato HTTP síncrono, saca la llamada HTTP de las transacciones JDBC y respeta la naturaleza compensable o terminal de cada transición en `EstadoAnimal`.
 - **Diagrama de secuencia (PlantUML):** [Secuencia-aprobar-saga.puml](diagramas/Secuencia-aprobar-saga.puml).
 - **Evidencia y piezas existentes consideradas:** `SolicitudService` (`conCambioDeAnimal`, `vencerEntrega`), `TareaVencimientos`, `Animal.cambiarEstadoPorProceso`, `Animal.marcarNoDisponible` (R-13), `EstadoAnimal.TRANSICIONES_DEL_PROCESO`, `docs/diagramas/Secuencia-aprobar.puml`, ADR-02, ADR-03, ADR-06, ADR-15 y ADR-16.
+
+## ADR-18. Idempotencia opcional en `POST /api/donaciones` con `Idempotency-Key` y conflicto `409`
+
+- **Contexto:** `POST /api/donaciones` crea una preferencia de cobro en Mercado Pago y persiste una donación `PENDIENTE`. Ante un timeout de red o un doble clic del cliente, reintentar el `POST` sin idempotencia genera dos preferencias de cobro y dos donaciones duplicadas.
+- **Alternativas:** (a) sin idempotencia; (b) `Idempotency-Key` global y `422 Unprocessable Entity` cuando la clave se reutiliza con distinto cuerpo (borrador IETF `draft-ietf-httpapi-idempotency-key-header`); (c) `Idempotency-Key` opcional acotada por `(donante_id, idempotency_key)` con hash SHA-256 canónico del monto/moneda y respuesta `409 Conflict` ante discrepancia de cuerpo.
+- **Decisión:** (c).
+- **Justificación:**
+  - **Opcional y retrocompatible:** si el cliente no envía `Idempotency-Key`, el endpoint conserva exactamente el comportamiento previo (`CONTRATOS.md`).
+  - **Aislamiento por donante (`UNIQUE (donante_id, idempotency_key)`):** impide que un usuario reutilice o adivine la clave de otro donante (evita fugas IDOR y bloqueos cruzados).
+  - **Por qué `409 Conflict` en lugar de `422`:** el contrato de errores del proyecto (`ErrorResponse`, `GlobalExceptionHandler`) utiliza `400` para errores de validación de entrada y `409` para todo conflicto de estado/regla/concurrencia; responder `409` mantiene un vocabulario HTTP uniforme sin introducir un código nuevo.
+  - **Normalización del monto:** el hash se calcula sobre `monto.stripTrailingZeros().toPlainString() + "|" + moneda`, por lo que `500` y `500.00` se reconocen como el mismo cuerpo. Si dos peticiones concurrentes llegan con la misma clave, la restricción `uk_donacion_donante_idempotency_key` decide y el reintento devuelve la donación ganadora.
+  - **Sin exposición de campos internos:** ni `idempotencyKey`, ni `requestHash`, ni `referencia`/`preferenciaId`/`pagoId` se serializan en `DonacionResponse`.
+- **Evidencia:** `V2__idempotency_key.sql`, `Donacion`, `DonacionService.crear`, `DonacionController.crear`, `DonacionIdempotenciaTest`, `FlywayMigrationIT` (ms-donaciones).
+
+## ADR-19. Política de versionado de la API REST (`/api`)
+
+- **Contexto:** los endpoints públicos viven bajo `/api/animales/**`, `/api/adoptantes/**`, `/api/solicitudes/**` y `/api/donaciones/**` sin prefijo de versión en la ruta (`CONTRATOS.md`), y el proyecto evolucionó agregando paginación (`page`, `size`, `X-Total-Count`) e idempotencia (`Idempotency-Key`) sin romper clientes existentes.
+- **Alternativas:** (a) migrar ya a `/api/v1/**` (rompe colección Postman, `prueba-humo.sh` y clientes existentes); (b) versionado por `Accept` header (media types custom, mayor fricción en Swagger/Postman/Gateway); (c) mantener `/api/**` como v1 estable con evolución estrictamente aditiva y reservar `/api/v2/**` únicamente ante un *breaking change* inevitable.
+- **Decisión:** (c).
+- **Reglas de evolución:**
+  - **Cambios aditivos permitidos bajo `/api/**` (retrocompatibles):** nuevos campos opcionales en requests, nuevos campos en responses JSON, nuevos parámetros de consulta opcionales con default seguro (`page`, `size`), nuevos encabezados opcionales de entrada o salida (`Idempotency-Key`, `X-Total-Count`), y nuevos endpoints o recursos.
+  - **Cambios incompatibles (*breaking changes*, prohibidos en `/api/**`):** eliminar o renombrar rutas o campos, volver obligatorio un parámetro/campo opcional, cambiar el tipo o formato raíz de una respuesta (por ejemplo envolver un JSON array en un objeto paginado), o modificar códigos HTTP/semántica de errores documentados.
+  - **Introducción de `/api/v2/**`:** cuando un cambio incompatible sea inevitable, se publicará en paralelo bajo `/api/v2/**` (enrutado por el Gateway) manteniendo `/api/**` con cabeceras `Deprecation` y `Sunset` durante una ventana de migración documentada, y exportando las especificaciones OpenAPI versionadas en `docs/openapi/`.
+- **Evidencia:** `CONTRATOS.md`, `docs/openapi/*.json`, `AnimalPaginacionTest`, `SolicitudPaginacionTest`, `DonacionPaginacionTest`, `DonacionIdempotenciaTest`.

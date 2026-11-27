@@ -9,6 +9,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import jakarta.persistence.Version;
 import utnfc.isi.back.tpi.common.exception.ConflictoException;
 import utnfc.isi.back.tpi.common.exception.SolicitudInvalidaException;
@@ -25,7 +26,9 @@ import java.time.LocalDateTime;
  *   confirmar dos donaciones (D-03).
  */
 @Entity
-@Table(name = "donacion", indexes = {
+@Table(name = "donacion", uniqueConstraints = {
+        @UniqueConstraint(name = "uk_donacion_donante_idempotency_key", columnNames = {"donante_id", "idempotency_key"})
+}, indexes = {
         @Index(name = "idx_donacion_donante_id", columnList = "donante_id"),
         @Index(name = "idx_donacion_estado", columnList = "estado")
 })
@@ -68,6 +71,12 @@ public class Donacion {
     @Column(name = "pago_id", unique = true, length = 64)
     private String pagoId;
 
+    @Column(name = "idempotency_key", length = 128)
+    private String idempotencyKey;
+
+    @Column(name = "request_hash", length = 64)
+    private String requestHash;
+
     @Version
     private long version;
 
@@ -77,6 +86,11 @@ public class Donacion {
 
     public Donacion(String referencia, String donanteId, BigDecimal monto, String preferenciaId, String linkPago,
                     LocalDateTime ahora) {
+        this(referencia, donanteId, monto, preferenciaId, linkPago, ahora, null, null);
+    }
+
+    public Donacion(String referencia, String donanteId, BigDecimal monto, String preferenciaId, String linkPago,
+                    LocalDateTime ahora, String idempotencyKey, String requestHash) {
         if (monto == null || monto.compareTo(BigDecimal.ZERO) <= 0) {
             throw new SolicitudInvalidaException("El monto de una donacion debe ser mayor a 0 (D-01)");
         }
@@ -89,6 +103,8 @@ public class Donacion {
         this.linkPago = linkPago;
         this.fechaCreacion = ahora;
         this.fechaActualizacion = ahora;
+        this.idempotencyKey = idempotencyKey;
+        this.requestHash = requestHash;
     }
 
     /** D-01: el monto debe cubrir el minimo configurado en la politica de donaciones. */
@@ -157,5 +173,13 @@ public class Donacion {
 
     public String getPagoId() {
         return pagoId;
+    }
+
+    public String getIdempotencyKey() {
+        return idempotencyKey;
+    }
+
+    public String getRequestHash() {
+        return requestHash;
     }
 }
