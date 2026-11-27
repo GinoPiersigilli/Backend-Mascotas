@@ -47,7 +47,7 @@ Implementado en `JwtTokenValidators` (`tpi-common`) y `GatewayJwtValidators` (`g
 
 - **Tokens y credenciales:** `ServiceTokenProvider`, `MercadoPagoClient` y `VerificadorFirmaMercadoPago` nunca registran `client_secret`, `MP_ACCESS_TOKEN`, `MP_WEBHOOK_SECRET` ni `Authorization`.
 - **Datos personales (PII):** `PerfilService`, `SolicitudService`, `GeorefClient` y `EventosAdopcionListener` omiten domicilio, teléfono y nombre completo en logs (solo registran IDs de solicitud/animal, distancia o motivo de error técnico).
-- **Escaneo automatizado:** `.github/workflows/security.yml` ejecuta `gitleaks` sobre todo el historial de git, `CodeQL` sobre Java, `Trivy` sobre filesystem/IaC y sobre las 4 imágenes Docker, y `dependency-review` en cada PR.
+- **Escaneo automatizado y gestión de CVEs:** `.github/workflows/security.yml` ejecuta `gitleaks` sobre todo el historial de git, `CodeQL` sobre Java, `Trivy` sobre filesystem/IaC y sobre las 4 imágenes Docker, y `dependency-review` en cada PR. Las dependencias transitivas con parches en la serie 3.5 (`pgjdbc 42.7.12`, `jackson 2.21.9`, `tomcat 10.1.62`, `netty 4.1.141.Final`, `bouncycastle 1.87`) se fijan en el `pom.xml` raíz; las 3 CVEs de Spring Framework `6.2.19` sin parche OSS en la rama 6.2 (`CVE-2026-47884` XsltView, `CVE-2026-47890` SSE con vistas y `CVE-2026-47892` WebFlux Functional Endpoints) están documentadas en `.trivyignore` con justificación VEX (`not_affected` sobre esta arquitectura REST sin vistas ni functional endpoints).
 
 ---
 
