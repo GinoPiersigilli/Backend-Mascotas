@@ -1,5 +1,7 @@
 package utnfc.isi.back.tpi.donaciones.repository;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import utnfc.isi.back.tpi.donaciones.model.Donacion;
@@ -13,6 +15,8 @@ public interface DonacionRepository extends JpaRepository<Donacion, Long> {
     List<Donacion> findAllByOrderByIdDesc();
 
     List<Donacion> findByDonanteIdOrderByIdDesc(String donanteId);
+
+    Page<Donacion> findByDonanteId(String donanteId, Pageable pageable);
 
     long countByEstado(EstadoDonacion estado);
 

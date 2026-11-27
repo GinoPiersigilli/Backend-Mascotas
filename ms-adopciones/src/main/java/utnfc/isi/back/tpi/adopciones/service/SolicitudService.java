@@ -3,6 +3,8 @@ package utnfc.isi.back.tpi.adopciones.service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -135,6 +137,20 @@ public class SolicitudService {
                         : solicitudRepository.findByAdoptanteIdAndEstadoOrderByIdDesc(usuario.id(), estado);
             }
             return solicitudes.stream().map(SolicitudResponse::desde).toList();
+        });
+    }
+
+    public Page<SolicitudResponse> listar(Usuario usuario, EstadoSolicitud estado, Pageable pageable) {
+        return txReadOnly.execute(st -> {
+            Page<Solicitud> pagina;
+            if (usuario.coordinador()) {
+                pagina = estado == null ? solicitudRepository.findAll(pageable)
+                        : solicitudRepository.findByEstado(estado, pageable);
+            } else {
+                pagina = estado == null ? solicitudRepository.findByAdoptanteId(usuario.id(), pageable)
+                        : solicitudRepository.findByAdoptanteIdAndEstado(usuario.id(), estado, pageable);
+            }
+            return pagina.map(SolicitudResponse::desde);
         });
     }
 

@@ -3,6 +3,8 @@ package utnfc.isi.back.tpi.donaciones.service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -73,6 +75,13 @@ public class DonacionService {
                 .stream()
                 .map(d -> DonacionResponse.desde(d, d.getEstado() == EstadoDonacion.CONFIRMADA))
                 .toList());
+    }
+
+    /** D-04: version paginada del listado (LIMIT/OFFSET en SQL). */
+    public Page<DonacionResponse> listar(String usuario, boolean coordinador, Pageable pageable) {
+        return txReadOnly.execute(st -> (coordinador ? repository.findAll(pageable)
+                : repository.findByDonanteId(usuario, pageable))
+                .map(d -> DonacionResponse.desde(d, d.getEstado() == EstadoDonacion.CONFIRMADA)));
     }
 
     /**

@@ -2,6 +2,8 @@ package utnfc.isi.back.tpi.animales.service;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import utnfc.isi.back.tpi.animales.dto.AnimalRequest;
@@ -51,6 +53,21 @@ public class AnimalService {
             animales = repository.findAllByOrderByIdAsc();
         }
         return animales.stream().map(AnimalResponse::desde).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public Page<AnimalResponse> listar(EstadoAnimal estado, Especie especie, Pageable pageable) {
+        Page<Animal> pagina;
+        if (estado != null && especie != null) {
+            pagina = repository.findByEstadoAndEspecie(estado, especie, pageable);
+        } else if (estado != null) {
+            pagina = repository.findByEstado(estado, pageable);
+        } else if (especie != null) {
+            pagina = repository.findByEspecie(especie, pageable);
+        } else {
+            pagina = repository.findAll(pageable);
+        }
+        return pagina.map(AnimalResponse::desde);
     }
 
     @Transactional(readOnly = true)
