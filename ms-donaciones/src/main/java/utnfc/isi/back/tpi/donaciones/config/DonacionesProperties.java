@@ -22,17 +22,24 @@ import java.time.Duration;
 @ConfigurationProperties("donaciones")
 public record DonacionesProperties(
         @NotNull @Positive BigDecimal montoMinimo,
-        @Valid @NotNull MercadoPago mercadoPago) {
+        @Valid @NotNull MercadoPago mercadoPago,
+        @Valid @NotNull Tareas tareas) {
 
     public record MercadoPago(
             @NotBlank String baseUrl,
             String accessToken,
+            String webhookSecret,
             @NotNull @DurationMin(millis = 1) Duration connectTimeout,
             @NotNull @DurationMin(millis = 1) Duration readTimeout,
             boolean usarSandboxInitPoint,
             @NotBlank String tituloItem,
             @Valid @NotNull Circuito circuitBreaker,
             @Valid @NotNull Reintento retry) {
+    }
+
+    public record Tareas(
+            boolean habilitadas,
+            @NotNull @DurationMin(millis = 1) Duration antiguedadMinima) {
     }
 
     public record Circuito(

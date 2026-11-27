@@ -8,8 +8,13 @@ Todas las rutas públicas se consumen por el Gateway (`http://localhost:8080`) c
  "message":"El animal 7 no esta disponible (estado RESERVADO) (R-01)","path":"/api/solicitudes","errores":[]}
 ```
 `errores` lista `{campo, mensaje}` solo en los 400 de validación. Códigos: 200/201 (con `Location`),
-400 datos inválidos, 401 sin token o token inválido, 403 rol insuficiente o recurso ajeno, 404,
-409 regla o estado, 503 otro servicio o proveedor no responde (504 si el Gateway agota la espera).
+400 datos inválidos, 401 sin token o token/firma inválida, 403 rol insuficiente o recurso ajeno, 404,
+409 regla o estado, 413 cuerpo superior al límite del Gateway (`GATEWAY_MAX_BODY_BYTES`, 1 MiB por defecto),
+503 otro servicio o proveedor no responde (504 si el Gateway agota la espera).
+
+El Gateway agrega cabeceras de seguridad (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
+`Referrer-Policy: no-referrer`, `Cache-Control: no-store`, `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`)
+y habilita CORS únicamente para los orígenes definidos en `GATEWAY_CORS_ALLOWED_ORIGINS` (bloqueado por defecto).
 
 La especificación OpenAPI de cada servicio está en `/v3/api-docs` y `/swagger-ui.html` de su puerto.
 
@@ -44,7 +49,9 @@ opcionales de paginación `page` (por defecto `0`, `>= 0`) y `size` (por defecto
 | `GET /api/adoptantes/me/perfil` | ADOPTANTE | — | 200, 404 |
 | `GET /api/adoptantes/{adoptanteId}/perfil` | COORDINADOR | — | 200, 404 |
 | `POST /api/solicitudes` | ADOPTANTE | `{"animalId"}` | 201 PENDIENTE o RECHAZADA (R-04); 404 animal; 409 R-01/R-02/R-03; 503 Animales |
-| `GET /api/solicitudes?estado=&page=0&size=50` | ADOPTANTE (propias), COORDINADOR (todas) | — | 200 lista + `X-Total-Count`, 400 |
+| `GET /api/solicitudes?estado=&controlVencido=&page=0&size=50` | ADOPTANTE (propias), COORDINADOR (todas; `controlVencido=true` solo COORDINADOR) | — | 200 lista + `X-Total-Count`, 400, 403 |
+| `GET /api/solicitudes/reportes` | COORDINADOR | — | 200 resumen por estado, controles vencidos y tiempo promedio de resolución |
+| `POST /api/solicitudes/reconciliacion` | COORDINADOR | — | 200 resultado de reconciliación con `ms-animales` (ADR-06) |
 | `GET /api/solicitudes/{id}` | dueño o COORDINADOR | — | 200, 403, 404 |
 | `GET /api/solicitudes/{id}/historial` | dueño o COORDINADOR | — | 200 lista de eventos |
 | `POST /api/solicitudes/{id}/cancelar` | ADOPTANTE dueño | — | 200, 403, 409 si no PENDIENTE |
@@ -77,9 +84,17 @@ Ejemplo real (verificación local del 27/10/2026, Georef en vivo):
 | `GET /api/donaciones?page=0&size=50` | ADOPTANTE (propias), COORDINADOR (todas) | — | 200 lista + `X-Total-Count`, 400 |
 | `GET /api/donaciones/{id}` | dueño o COORDINADOR | — | 200 (si PENDIENTE consulta el pago), 403, 404 |
 | `GET /api/donaciones/total` | COORDINADOR | — | 200 `{"totalConfirmado","cantidad"}` |
+| `POST /api/donaciones/webhooks/mercadopago` | Público (HMAC-SHA256 `x-signature`) | Notificación de pago Mercado Pago (`type`, `data.id`) | 200 procesado idempotente, 401 firma inválida/ausente, 503 secreto no configurado o MP caído |
 
 `DonacionResponse`: `id`, `donanteId`, `monto`, `moneda` (ARS), `estado` (`PENDIENTE|CONFIRMADA`),
 `fechaCreacion`, `fechaActualizacion`, `linkPago`, `verificado`.
+
+### Pruebas locales del webhook de Mercado Pago (túnel HTTPS)
+
+Mercado Pago requiere una URL HTTPS pública para enviar notificaciones reales. En desarrollo local:
+1. Configurar `MP_WEBHOOK_SECRET` en `.env` con la clave secreta del panel de Webhooks de Mercado Pago (en `docker-compose.demo.yml` se fija `demo-webhook-secret`).
+2. Exponer el Gateway (`localhost:8080`) con un túnel temporal, por ejemplo `ngrok http 8080` o `cloudflared tunnel --url http://localhost:8080`.
+3. Registrar `<URL-publica>/api/donaciones/webhooks/mercadopago` para el tópico **Pagos** (`payment`). Cada notificación valida `x-signature` con HMAC-SHA256 y consulta `GET /v1/payments/{id}` antes de confirmar la donación.
 
 ## Integraciones externas
 
@@ -88,6 +103,7 @@ Ejemplo real (verificación local del 27/10/2026, Georef en vivo):
 | Georef | `GET https://apis.datos.gob.ar/georef/api/v2.0/direcciones?direccion&provincia&localidad&max=1` | `direcciones[0].ubicacion.lat/lon` → distancia al refugio (R-06) | timeout 4 s, error, sin resultados o formato inesperado → `distanciaNoVerificada` |
 | Mercado Pago | `POST https://api.mercadopago.com/checkout/preferences` | `id`, `init_point` → `linkPago` | 503 y no se guarda la donación |
 | Mercado Pago | `GET https://api.mercadopago.com/v1/payments/search?external_reference=` | `results[].status == "approved"` → CONFIRMADA (D-02) | queda PENDIENTE con `verificado=false` |
+| Mercado Pago | `GET https://api.mercadopago.com/v1/payments/{id}` | Verificación autoritativa del pago al recibir un webhook firmado (F2) | 503 para que Mercado Pago reintente |
 | Keycloak | `POST /realms/adopciones/protocol/openid-connect/token` (client credentials) | token SERVICIO | 503 |
 
 ## Especificaciones OpenAPI exportadas

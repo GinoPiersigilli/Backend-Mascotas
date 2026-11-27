@@ -169,6 +169,7 @@ services:
       DB_PASSWORD: ${DONACIONES_DB_PASSWORD}
       MP_BASE_URL: ${MP_BASE_URL:-https://api.mercadopago.com}
       MP_ACCESS_TOKEN: ${MP_ACCESS_TOKEN}
+      MP_WEBHOOK_SECRET: ${MP_WEBHOOK_SECRET:-sin-configurar}
       MP_USAR_SANDBOX_INIT_POINT: ${MP_USAR_SANDBOX_INIT_POINT:-false}
       DONACION_MONTO_MINIMO: ${DONACION_MONTO_MINIMO:-1}
       SWAGGER_ENABLED: ${SWAGGER_ENABLED:-false}
@@ -195,6 +196,8 @@ services:
       ANIMALES_URL: http://ms-animales:8081
       ADOPCIONES_URL: http://ms-adopciones:8082
       DONACIONES_URL: http://ms-donaciones:8083
+      GATEWAY_CORS_ALLOWED_ORIGINS: ${GATEWAY_CORS_ALLOWED_ORIGINS:-}
+      GATEWAY_MAX_BODY_BYTES: ${GATEWAY_MAX_BODY_BYTES:-1048576}
     ports:
       - "8080:8080"
     depends_on:

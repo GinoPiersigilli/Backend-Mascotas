@@ -29,6 +29,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/actuator/prometheus").hasRole(SERVICIO)
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .requestMatchers("/error").permitAll()
+                        // Webhook de Mercado Pago: publico sin JWT; valida firma HMAC-SHA256 x-signature
+                        .requestMatchers(HttpMethod.POST, "/api/donaciones/webhooks/mercadopago").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/donaciones").hasRole(ADOPTANTE)
                         .requestMatchers(HttpMethod.GET, "/api/donaciones/total").hasRole(COORDINADOR)
                         .requestMatchers(HttpMethod.GET, "/api/donaciones", "/api/donaciones/**")

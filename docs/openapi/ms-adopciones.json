@@ -51,6 +51,44 @@
         "required" : [ "animalId" ],
         "type" : "object"
       },
+      "DetalleInconsistencia" : {
+        "properties" : {
+          "animalId" : {
+            "example" : 1,
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "detalle" : {
+            "example" : "Animal liberado a DISPONIBLE por solicitud PENDIENTE sin reserva confirmada",
+            "type" : "string"
+          },
+          "estadoAnimalDetectado" : {
+            "enum" : [ "DISPONIBLE", "RESERVADO", "EN_ADAPTACION", "ADOPTADO", "NO_DISPONIBLE" ],
+            "example" : "RESERVADO",
+            "type" : [ "string", "null" ]
+          },
+          "estadoAnimalEsperado" : {
+            "enum" : [ "DISPONIBLE", "RESERVADO", "EN_ADAPTACION", "ADOPTADO", "NO_DISPONIBLE" ],
+            "example" : "DISPONIBLE",
+            "type" : [ "string", "null" ]
+          },
+          "estadoSolicitud" : {
+            "enum" : [ "PENDIENTE", "APROBADA", "RECHAZADA", "CANCELADA", "EN_ADAPTACION", "FINALIZADA", "REVERTIDA" ],
+            "example" : "PENDIENTE",
+            "type" : "string"
+          },
+          "resultado" : {
+            "example" : "REPARADA",
+            "type" : "string"
+          },
+          "solicitudId" : {
+            "example" : 5,
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
       "ErrorResponse" : {
         "properties" : {
           "error" : {
@@ -217,6 +255,73 @@
             "enum" : [ "CASA", "DEPARTAMENTO" ],
             "example" : "CASA",
             "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "ReconciliacionResponse" : {
+        "properties" : {
+          "conflictos" : {
+            "description" : "Desincronizaciones no auto-reparables que requieren revision manual",
+            "example" : 0,
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "detalles" : {
+            "description" : "Detalle de inconsistencias detectadas",
+            "items" : {
+              "$ref" : "#/components/schemas/DetalleInconsistencia"
+            },
+            "type" : "array"
+          },
+          "erroresRemotos" : {
+            "description" : "Solicitudes que no pudieron verificarse por error remoto de ms-animales",
+            "example" : 0,
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "evaluadas" : {
+            "description" : "Cantidad de solicitudes evaluadas contra ms-animales",
+            "example" : 3,
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "reparadas" : {
+            "description" : "Desincronizaciones reparadas automaticamente",
+            "example" : 1,
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "ResumenSolicitudesResponse" : {
+        "properties" : {
+          "controlesFinalesVencidos" : {
+            "description" : "Solicitudes EN_ADAPTACION con fechaControl vencida",
+            "example" : 2,
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "porEstado" : {
+            "additionalProperties" : {
+              "format" : "int64",
+              "type" : "integer"
+            },
+            "description" : "Cantidad de solicitudes agrupadas por estado",
+            "type" : "object"
+          },
+          "tiempoPromedioResolucionHoras" : {
+            "description" : "Horas promedio desde fechaCreacion hasta el cierre en solicitudes resueltas (FINALIZADA, RECHAZADA, CANCELADA, REVERTIDA)",
+            "example" : 18.5,
+            "format" : "double",
+            "type" : [ "number", "null" ]
+          },
+          "total" : {
+            "description" : "Cantidad total de solicitudes registradas",
+            "example" : 12,
+            "format" : "int64",
+            "type" : "integer"
           }
         },
         "type" : "object"
@@ -495,6 +600,15 @@
             "type" : "string"
           }
         }, {
+          "description" : "Filtrar solicitudes EN_ADAPTACION con control final vencido (solo COORDINADOR)",
+          "example" : true,
+          "in" : "query",
+          "name" : "controlVencido",
+          "required" : false,
+          "schema" : {
+            "type" : "boolean"
+          }
+        }, {
           "description" : "Numero de pagina (base 0)",
           "example" : 0,
           "in" : "query",
@@ -663,6 +777,84 @@
           }
         },
         "summary" : "Presenta una solicitud (ADOPTANTE). Aplica R-01 a R-06",
+        "tags" : [ "Solicitudes" ]
+      }
+    },
+    "/api/solicitudes/reconciliacion" : {
+      "post" : {
+        "operationId" : "reconciliar",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ReconciliacionResponse"
+                }
+              }
+            },
+            "description" : "Resultado de la reconciliacion con reparaciones y conflictos"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No autenticado"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rol insuficiente (requiere COORDINADOR)"
+          }
+        },
+        "summary" : "Ejecuta una corrida de reconciliacion de estados contra ms-animales (COORDINADOR). ADR-06",
+        "tags" : [ "Solicitudes" ]
+      }
+    },
+    "/api/solicitudes/reportes" : {
+      "get" : {
+        "operationId" : "reportes",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ResumenSolicitudesResponse"
+                }
+              }
+            },
+            "description" : "Resumen operativo de solicitudes"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No autenticado"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rol insuficiente (requiere COORDINADOR)"
+          }
+        },
+        "summary" : "Resumen de solicitudes por estado y tiempo promedio de resolucion (COORDINADOR)",
         "tags" : [ "Solicitudes" ]
       }
     },

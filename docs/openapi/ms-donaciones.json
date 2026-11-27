@@ -108,6 +108,31 @@
           }
         },
         "type" : "object"
+      },
+      "WebhookData" : {
+        "properties" : {
+          "id" : {
+            "example" : "999888777",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "WebhookPayload" : {
+        "properties" : {
+          "action" : {
+            "example" : "payment.updated",
+            "type" : "string"
+          },
+          "data" : {
+            "$ref" : "#/components/schemas/WebhookData"
+          },
+          "type" : {
+            "example" : "payment",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
       }
     },
     "securitySchemes" : {
@@ -341,6 +366,92 @@
         "tags" : [ "Donaciones" ]
       }
     },
+    "/api/donaciones/webhooks/mercadopago" : {
+      "post" : {
+        "description" : "Valida HMAC-SHA256 con MP_WEBHOOK_SECRET y consulta el estado autoritativo del pago en Mercado Pago",
+        "operationId" : "recibir",
+        "parameters" : [ {
+          "description" : "Firma HMAC-SHA256 enviada por Mercado Pago",
+          "example" : "ts=1704908010,v1=...",
+          "in" : "header",
+          "name" : "x-signature",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "description" : "Identificador de solicitud enviado por Mercado Pago",
+          "example" : "req-123",
+          "in" : "header",
+          "name" : "x-request-id",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "description" : "Tipo de evento (query param)",
+          "example" : "payment",
+          "in" : "query",
+          "name" : "type",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "description" : "Identificador del recurso (query param data.id)",
+          "example" : 999888777,
+          "in" : "query",
+          "name" : "data.id",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/WebhookPayload"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "object"
+                }
+              }
+            },
+            "description" : "Notificacion recibida y procesada de forma idempotente"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Cabecera x-signature ausente o invalida"
+          },
+          "503" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Secreto no configurado o Mercado Pago no responde (reintento seguro)"
+          }
+        },
+        "summary" : "Recibe notificaciones firmadas de pago desde Mercado Pago (sin JWT; valida x-signature)",
+        "tags" : [ "Webhooks" ]
+      }
+    },
     "/api/donaciones/{id}" : {
       "get" : {
         "operationId" : "obtener",
@@ -411,5 +522,8 @@
   "tags" : [ {
     "description" : "Donaciones a la cuenta comun con Mercado Pago (P5)",
     "name" : "Donaciones"
+  }, {
+    "description" : "Notificaciones entrantes firmadas de Mercado Pago (F2)",
+    "name" : "Webhooks"
   } ]
 }

@@ -4,6 +4,7 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -15,7 +16,11 @@ import utnfc.isi.back.tpi.adopciones.client.AnimalesClient;
 import utnfc.isi.back.tpi.adopciones.client.EstadoAnimal;
 import utnfc.isi.back.tpi.adopciones.config.PoliticaAdopcion;
 import utnfc.isi.back.tpi.adopciones.dto.EventoResponse;
+import utnfc.isi.back.tpi.adopciones.dto.ResumenSolicitudesResponse;
 import utnfc.isi.back.tpi.adopciones.dto.SolicitudResponse;
+import utnfc.isi.back.tpi.adopciones.event.AdopcionConfirmadaEvent;
+import utnfc.isi.back.tpi.adopciones.event.EntregaConfirmadaEvent;
+import utnfc.isi.back.tpi.adopciones.event.SolicitudAprobadaEvent;
 import utnfc.isi.back.tpi.adopciones.model.EstadoSolicitud;
 import utnfc.isi.back.tpi.adopciones.model.Perfil;
 import utnfc.isi.back.tpi.adopciones.model.ResultadoControl;
@@ -27,10 +32,15 @@ import utnfc.isi.back.tpi.common.exception.ConflictoException;
 import utnfc.isi.back.tpi.common.exception.RecursoNoEncontradoException;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Consumer;
 
 /**
@@ -51,6 +61,9 @@ import java.util.function.Consumer;
 public class SolicitudService {
 
     private static final Logger log = LoggerFactory.getLogger(SolicitudService.class);
+    private static final Set<EstadoSolicitud> ESTADOS_RESUELTOS = EnumSet.of(
+            EstadoSolicitud.FINALIZADA, EstadoSolicitud.RECHAZADA,
+            EstadoSolicitud.CANCELADA, EstadoSolicitud.REVERTIDA);
 
     private final SolicitudRepository solicitudRepository;
     private final PerfilRepository perfilRepository;
@@ -60,12 +73,14 @@ public class SolicitudService {
     private final TransactionTemplate tx;
     private final TransactionTemplate txReadOnly;
     private final Clock clock;
+    private final ApplicationEventPublisher eventPublisher;
     private final Counter solicitudesCreadas;
     private final Counter solicitudesAprobadas;
 
     public SolicitudService(SolicitudRepository solicitudRepository, PerfilRepository perfilRepository,
                             AnimalesClient animalesClient, EvaluadorSolicitud evaluador, PoliticaAdopcion politica,
-                            PlatformTransactionManager transactionManager, Clock clock, MeterRegistry meterRegistry) {
+                            PlatformTransactionManager transactionManager, Clock clock, MeterRegistry meterRegistry,
+                            ApplicationEventPublisher eventPublisher) {
         this.solicitudRepository = solicitudRepository;
         this.perfilRepository = perfilRepository;
         this.animalesClient = animalesClient;
@@ -75,6 +90,7 @@ public class SolicitudService {
         this.txReadOnly = new TransactionTemplate(transactionManager);
         this.txReadOnly.setReadOnly(true);
         this.clock = clock;
+        this.eventPublisher = eventPublisher;
         this.solicitudesCreadas = Counter.builder("adopciones.solicitudes.creadas")
                 .description("Total de solicitudes de adopcion creadas")
                 .register(meterRegistry);
@@ -152,9 +168,23 @@ public class SolicitudService {
     }
 
     public Page<SolicitudResponse> listar(Usuario usuario, EstadoSolicitud estado, Pageable pageable) {
+        return listar(usuario, estado, null, pageable);
+    }
+
+    public Page<SolicitudResponse> listar(Usuario usuario, EstadoSolicitud estado, Boolean controlVencido, Pageable pageable) {
+        if (Boolean.TRUE.equals(controlVencido) && !usuario.coordinador()) {
+            throw new AccesoDenegadoException("El filtro controlVencido es exclusivo del Coordinador");
+        }
         return txReadOnly.execute(st -> {
             Page<Solicitud> pagina;
-            if (usuario.coordinador()) {
+            if (Boolean.TRUE.equals(controlVencido)) {
+                if (estado != null && estado != EstadoSolicitud.EN_ADAPTACION) {
+                    pagina = Page.empty(pageable);
+                } else {
+                    pagina = solicitudRepository.findByEstadoAndFechaControlBefore(
+                            EstadoSolicitud.EN_ADAPTACION, LocalDateTime.now(clock), pageable);
+                }
+            } else if (usuario.coordinador()) {
                 pagina = estado == null ? solicitudRepository.findAll(pageable)
                         : solicitudRepository.findByEstado(estado, pageable);
             } else {
@@ -162,6 +192,38 @@ public class SolicitudService {
                         : solicitudRepository.findByAdoptanteIdAndEstado(usuario.id(), estado, pageable);
             }
             return pagina.map(SolicitudResponse::desde);
+        });
+    }
+
+    /** F4: resumen operativo para el Coordinador (cantidades por estado y tiempo promedio de resolucion). */
+    public ResumenSolicitudesResponse resumen() {
+        return txReadOnly.execute(st -> {
+            Map<EstadoSolicitud, Long> porEstado = new EnumMap<>(EstadoSolicitud.class);
+            for (EstadoSolicitud estado : EstadoSolicitud.values()) {
+                porEstado.put(estado, 0L);
+            }
+            long total = 0L;
+            for (Object[] fila : solicitudRepository.contarPorEstado()) {
+                EstadoSolicitud estado = (EstadoSolicitud) fila[0];
+                long cantidad = ((Number) fila[1]).longValue();
+                porEstado.put(estado, cantidad);
+                total += cantidad;
+            }
+            long controlesVencidos = solicitudRepository.countByEstadoAndFechaControlBefore(
+                    EstadoSolicitud.EN_ADAPTACION, LocalDateTime.now(clock));
+            List<Object[]> tiempos = solicitudRepository.tiemposDeResolucion(ESTADOS_RESUELTOS);
+            Double promedioHoras = null;
+            if (!tiempos.isEmpty()) {
+                double totalHoras = 0.0;
+                for (Object[] fila : tiempos) {
+                    LocalDateTime inicio = (LocalDateTime) fila[0];
+                    LocalDateTime fin = (LocalDateTime) fila[1];
+                    long segundos = Math.max(0L, Duration.between(inicio, fin).toSeconds());
+                    totalHoras += segundos / 3600.0;
+                }
+                promedioHoras = Math.round((totalHoras / tiempos.size()) * 100.0) / 100.0;
+            }
+            return new ResumenSolicitudesResponse(total, porEstado, controlesVencidos, promedioHoras);
         });
     }
 
@@ -187,6 +249,9 @@ public class SolicitudService {
         SolicitudResponse respuesta = conCambioDeAnimal(id, EstadoAnimal.RESERVADO,
                 s -> s.aprobar(justificacion, LocalDateTime.now(clock), usuario.id()));
         solicitudesAprobadas.increment();
+        eventPublisher.publishEvent(new SolicitudAprobadaEvent(
+                respuesta.id(), respuesta.animalId(), respuesta.adoptanteId(), usuario.id(),
+                respuesta.justificacionExcepcion() != null, respuesta.fechaAprobacion()));
         return respuesta;
     }
 
@@ -205,9 +270,13 @@ public class SolicitudService {
             throw new ConflictoException("El plazo de entrega de " + politica.plazoEntregaDias() + " dias vencio: "
                     + "la solicitud " + id + " se cancelo y el animal volvio a estar disponible (R-09)");
         }
-        return conCambioDeAnimal(id, EstadoAnimal.EN_ADAPTACION,
+        SolicitudResponse respuesta = conCambioDeAnimal(id, EstadoAnimal.EN_ADAPTACION,
                 s -> s.confirmarEntrega(LocalDateTime.now(clock), politica.plazoEntregaDias(),
                         politica.periodoAdaptacionDias(), usuario.id()));
+        eventPublisher.publishEvent(new EntregaConfirmadaEvent(
+                respuesta.id(), respuesta.animalId(), respuesta.adoptanteId(), usuario.id(),
+                respuesta.fechaEntrega(), respuesta.fechaControl()));
+        return respuesta;
     }
 
     public SolicitudResponse cancelarEntrega(Usuario usuario, Long id, String motivo) {
@@ -245,13 +314,41 @@ public class SolicitudService {
                 .stream().map(Solicitud::getId).toList());
     }
 
+    /** F1: ids de solicitudes EN_ADAPTACION con control final vencido y aun no alertadas. */
+    public List<Long> buscarControlesVencidosSinAlertar() {
+        LocalDateTime ahora = LocalDateTime.now(clock);
+        return txReadOnly.execute(st -> solicitudRepository
+                .findByEstadoAndFechaControlBeforeAndControlVencidoAlertadoFalse(EstadoSolicitud.EN_ADAPTACION, ahora)
+                .stream().map(Solicitud::getId).toList());
+    }
+
+    /** F1: registra la alerta de control final vencido en el historial sin cambiar el estado. */
+    public boolean alertarControlVencido(Long id) {
+        Boolean alertada = tx.execute(st -> {
+            Solicitud s = buscar(id);
+            if (!s.registrarAlertaControlVencido(LocalDateTime.now(clock))) {
+                return false;
+            }
+            solicitudRepository.saveAndFlush(s);
+            log.info("Alerta de control final vencido registrada para solicitud {} (animal {})", id, s.getAnimalId());
+            return true;
+        });
+        return Boolean.TRUE.equals(alertada);
+    }
+
     // ------------------------------------------------------------------ P4: seguimiento
 
     /** R-11 (CONFORME -> animal ADOPTADO) y R-12 (DESFAVORABLE -> animal DISPONIBLE). */
     public SolicitudResponse registrarControl(Usuario usuario, Long id, ResultadoControl resultado, String observaciones) {
         EstadoAnimal destino = resultado == ResultadoControl.CONFORME ? EstadoAnimal.ADOPTADO : EstadoAnimal.DISPONIBLE;
-        return conCambioDeAnimal(id, destino,
-                s -> s.registrarControl(resultado, observaciones, LocalDateTime.now(clock), usuario.id()));
+        LocalDateTime fechaEvento = LocalDateTime.now(clock);
+        SolicitudResponse respuesta = conCambioDeAnimal(id, destino,
+                s -> s.registrarControl(resultado, observaciones, fechaEvento, usuario.id()));
+        if (resultado == ResultadoControl.CONFORME) {
+            eventPublisher.publishEvent(new AdopcionConfirmadaEvent(
+                    respuesta.id(), respuesta.animalId(), respuesta.adoptanteId(), usuario.id(), fechaEvento));
+        }
+        return respuesta;
     }
 
     /** R-12: devolucion pedida por el adoptante durante la adaptacion. */

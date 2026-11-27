@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.core.annotation.Order;
+import org.springframework.core.io.buffer.DataBufferLimitException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ResponseStatusException;
@@ -41,6 +42,12 @@ public class GatewayErrorHandler implements WebExceptionHandler {
     public Mono<Void> handle(ServerWebExchange exchange, Throwable ex) {
         String correlationId = exchange.getAttributeOrDefault(CorrelationIdGlobalFilter.ATTR, "-");
         try (MDC.MDCCloseable ignored = MDC.putCloseable(CorrelationIdGlobalFilter.MDC_KEY, correlationId)) {
+            if (esCausadoPor(ex, DataBufferLimitException.class)) {
+                log.warn("Cuerpo demasiado grande para {}: {}", exchange.getRequest().getPath(), ex.getMessage());
+                return errorWriter.escribir(exchange, HttpStatus.PAYLOAD_TOO_LARGE,
+                        JsonErrorWriter.descripcion(HttpStatus.PAYLOAD_TOO_LARGE),
+                        "El cuerpo de la solicitud supera el limite maximo permitido");
+            }
             if (esCausadoPor(ex, TimeoutException.class)) {
                 log.warn("Tiempo de espera agotado para {}: {}", exchange.getRequest().getPath(), ex.getMessage());
                 return errorWriter.escribir(exchange, HttpStatus.GATEWAY_TIMEOUT,
@@ -65,7 +72,7 @@ public class GatewayErrorHandler implements WebExceptionHandler {
                 }
                 String mensaje = status == HttpStatus.NOT_FOUND
                         ? "No existe el recurso " + exchange.getRequest().getPath().value()
-                        : status.getReasonPhrase();
+                        : (rse.getReason() != null && !rse.getReason().isBlank() ? rse.getReason() : status.getReasonPhrase());
                 return errorWriter.escribir(exchange, status, JsonErrorWriter.descripcion(status), mensaje);
             }
             log.error("Error inesperado en el Gateway para {}", exchange.getRequest().getPath(), ex);

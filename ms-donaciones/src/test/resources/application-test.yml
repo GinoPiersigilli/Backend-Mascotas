@@ -8,3 +8,10 @@ spring:
   jpa:
     hibernate:
       ddl-auto: create-drop
+
+donaciones:
+  mercado-pago:
+    webhook-secret: test-webhook-secret
+  tareas:
+    habilitadas: false
+    antiguedad-minima: 5m

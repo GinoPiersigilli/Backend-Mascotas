@@ -75,6 +75,8 @@ adopciones:
     habilitadas: ${TAREAS_HABILITADAS:true}
     demora-inicial-ms: ${VENCIMIENTOS_DEMORA_INICIAL_MS:60000}
     intervalo-ms: ${VENCIMIENTOS_INTERVALO_MS:300000}
+    controles-intervalo-ms: ${CONTROLES_VENCIDOS_INTERVALO_MS:300000}
+    reconciliacion-intervalo-ms: ${RECONCILIACION_INTERVALO_MS:600000}
 
 springdoc:
   api-docs:
