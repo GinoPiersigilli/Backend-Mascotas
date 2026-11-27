@@ -14,6 +14,8 @@ import utnfc.isi.back.tpi.animales.model.Especie;
 import utnfc.isi.back.tpi.animales.repository.AnimalRepository;
 import utnfc.isi.back.tpi.common.exception.RecursoNoEncontradoException;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -26,15 +28,18 @@ public class AnimalService {
     private static final Logger log = LoggerFactory.getLogger(AnimalService.class);
 
     private final AnimalRepository repository;
+    private final Clock clock;
 
-    public AnimalService(AnimalRepository repository) {
+    public AnimalService(AnimalRepository repository, Clock clock) {
         this.repository = repository;
+        this.clock = clock;
     }
 
     @Transactional
     public AnimalResponse crear(AnimalRequest req) {
+        LocalDateTime ahora = LocalDateTime.now(clock);
         Animal animal = new Animal(req.nombre(), req.especie(), req.edadMeses(), req.tamanio(),
-                req.necesidadesEspeciales(), req.aptoNinios(), req.aptoOtrosAnimales(), req.requiereEspacioExterior());
+                req.necesidadesEspeciales(), req.aptoNinios(), req.aptoOtrosAnimales(), req.requiereEspacioExterior(), ahora);
         Animal guardado = repository.save(animal);
         log.info("Alta del animal {} ({})", guardado.getId(), guardado.getNombre());
         return AnimalResponse.desde(guardado);
@@ -79,14 +84,15 @@ public class AnimalService {
     public AnimalResponse actualizar(Long id, AnimalRequest req) {
         Animal animal = buscar(id);
         animal.actualizarDatos(req.nombre(), req.especie(), req.edadMeses(), req.tamanio(),
-                req.necesidadesEspeciales(), req.aptoNinios(), req.aptoOtrosAnimales(), req.requiereEspacioExterior());
+                req.necesidadesEspeciales(), req.aptoNinios(), req.aptoOtrosAnimales(), req.requiereEspacioExterior(),
+                LocalDateTime.now(clock));
         return AnimalResponse.desde(animal);
     }
 
     @Transactional
     public AnimalResponse marcarNoDisponible(Long id, String motivo) {
         Animal animal = buscar(id);
-        animal.marcarNoDisponible(motivo);
+        animal.marcarNoDisponible(motivo, LocalDateTime.now(clock));
         log.info("Animal {} marcado NO_DISPONIBLE", id);
         return AnimalResponse.desde(animal);
     }
@@ -94,7 +100,7 @@ public class AnimalService {
     @Transactional
     public AnimalResponse marcarDisponible(Long id) {
         Animal animal = buscar(id);
-        animal.marcarDisponible();
+        animal.marcarDisponible(LocalDateTime.now(clock));
         log.info("Animal {} vuelve a DISPONIBLE", id);
         return AnimalResponse.desde(animal);
     }
@@ -109,7 +115,7 @@ public class AnimalService {
     public AnimalResponse cambiarEstadoPorProceso(Long id, EstadoAnimal nuevoEstado) {
         Animal animal = buscar(id);
         EstadoAnimal anterior = animal.getEstado();
-        animal.cambiarEstadoPorProceso(nuevoEstado);
+        animal.cambiarEstadoPorProceso(nuevoEstado, LocalDateTime.now(clock));
         repository.saveAndFlush(animal);
         log.info("Animal {}: {} -> {} (pedido por el proceso de adopcion)", id, anterior, nuevoEstado);
         return AnimalResponse.desde(animal);
