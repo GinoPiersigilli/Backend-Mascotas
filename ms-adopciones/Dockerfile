@@ -10,6 +10,7 @@ COPY ms-animales/pom.xml ms-animales/
 COPY ms-adopciones/pom.xml ms-adopciones/
 COPY ms-donaciones/pom.xml ms-donaciones/
 COPY gateway/pom.xml gateway/
+COPY coverage-report/pom.xml coverage-report/
 RUN --mount=type=cache,target=/root/.m2 \
     mvn -B -q -pl ms-adopciones -am dependency:go-offline -DexcludeGroupIds=utnfc.isi.back.tpi
 

@@ -28,6 +28,7 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -81,8 +82,8 @@ public class DonacionService {
         String hash = clave == null ? null : hashSolicitud(monto);
 
         if (clave != null) {
-            Optional<Donacion> existente = txReadOnly.execute(
-                    st -> repository.findByDonanteIdAndIdempotencyKey(donanteId, clave));
+            Optional<Donacion> existente = Objects.requireNonNull(txReadOnly.execute(
+                    st -> repository.findByDonanteIdAndIdempotencyKey(donanteId, clave)));
             if (existente.isPresent()) {
                 return resolverIdempotencia(existente.get(), hash);
             }
@@ -93,14 +94,14 @@ public class DonacionService {
         Donacion donacion = new Donacion(referencia, donanteId, monto, cobro.preferenciaId(), cobro.linkPago(),
                 LocalDateTime.now(clock), clave, hash);
         try {
-            DonacionResponse respuesta = tx
-                    .execute(st -> DonacionResponse.desde(repository.saveAndFlush(donacion), true));
+            DonacionResponse respuesta = Objects.requireNonNull(
+                    tx.execute(st -> DonacionResponse.desde(repository.saveAndFlush(donacion), true)));
             log.info("Donacion {} creada PENDIENTE por {} ARS", respuesta.id(), monto);
             return respuesta;
         } catch (DataIntegrityViolationException e) {
             if (clave != null) {
-                Optional<Donacion> ganadora = txReadOnly.execute(
-                        st -> repository.findByDonanteIdAndIdempotencyKey(donanteId, clave));
+                Optional<Donacion> ganadora = Objects.requireNonNull(txReadOnly.execute(
+                        st -> repository.findByDonanteIdAndIdempotencyKey(donanteId, clave)));
                 if (ganadora.isPresent()) {
                     return resolverIdempotencia(ganadora.get(), hash);
                 }
@@ -154,7 +155,7 @@ public class DonacionService {
      * verificado = false (se puede volver a consultar mas tarde).
      */
     public DonacionResponse obtener(String usuario, boolean coordinador, Long id) {
-        Donacion donacion = txReadOnly.execute(st -> buscar(id));
+        Donacion donacion = Objects.requireNonNull(txReadOnly.execute(st -> buscar(id)));
         if (!coordinador && !donacion.perteneceA(usuario)) {
             throw new AccesoDenegadoException("La donacion " + id + " pertenece a otro donante (D-04)");
         }
@@ -175,7 +176,10 @@ public class DonacionService {
         return confirmar(id, pagoAprobado.get());
     }
 
-    /** F2: ids de donaciones PENDIENTE con antiguedad mayor a la configurada, para reconciliar. */
+    /**
+     * F2: ids de donaciones PENDIENTE con antiguedad mayor a la configurada, para
+     * reconciliar.
+     */
     public List<Long> buscarPendientesParaReconciliar() {
         LocalDateTime limite = LocalDateTime.now(clock).minus(props.tareas().antiguedadMinima());
         return txReadOnly.execute(st -> repository
@@ -184,11 +188,12 @@ public class DonacionService {
     }
 
     /**
-     * F2: reconcilia una donacion PENDIENTE consultando Mercado Pago fuera de la transaccion.
+     * F2: reconcilia una donacion PENDIENTE consultando Mercado Pago fuera de la
+     * transaccion.
      * Devuelve true solo si efectivamente paso a CONFIRMADA en esta corrida.
      */
     public boolean reconciliarPendiente(Long id) {
-        Optional<Donacion> opt = txReadOnly.execute(st -> repository.findById(id));
+        Optional<Donacion> opt = Objects.requireNonNull(txReadOnly.execute(st -> repository.findById(id)));
         if (opt.isEmpty() || opt.get().getEstado() != EstadoDonacion.PENDIENTE) {
             return false;
         }
@@ -200,9 +205,12 @@ public class DonacionService {
     }
 
     /**
-     * F2 (webhook): consulta el detalle autoritativo del pago en Mercado Pago y, si esta aprobado
-     * y corresponde a una donacion PENDIENTE por external_reference, la confirma idempotentemente.
-     * Si Mercado Pago no responde propaga ServicioNoDisponibleException (503) para que reintente.
+     * F2 (webhook): consulta el detalle autoritativo del pago en Mercado Pago y, si
+     * esta aprobado
+     * y corresponde a una donacion PENDIENTE por external_reference, la confirma
+     * idempotentemente.
+     * Si Mercado Pago no responde propaga ServicioNoDisponibleException (503) para
+     * que reintente.
      */
     public boolean procesarNotificacionPago(String pagoId) {
         Optional<MercadoPagoClient.PagoDetalle> detalleOpt = mercadoPago.obtenerPago(pagoId);
@@ -216,8 +224,8 @@ public class DonacionService {
                     pagoId, detalle.status());
             return false;
         }
-        Optional<Donacion> donacionOpt = txReadOnly.execute(
-                st -> repository.findByReferencia(detalle.externalReference().trim()));
+        Optional<Donacion> donacionOpt = Objects.requireNonNull(txReadOnly.execute(
+                st -> repository.findByReferencia(detalle.externalReference().trim())));
         if (donacionOpt.isEmpty()) {
             log.warn("Webhook Mercado Pago: pago {} aprobado con referencia desconocida {}",
                     pagoId, detalle.externalReference());

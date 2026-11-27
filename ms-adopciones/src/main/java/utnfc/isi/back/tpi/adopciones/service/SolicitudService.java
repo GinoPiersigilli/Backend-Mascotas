@@ -39,6 +39,7 @@ import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -140,7 +141,8 @@ public class SolicitudService {
         }
 
         try {
-            SolicitudResponse respuesta = tx.execute(st -> SolicitudResponse.desde(solicitudRepository.saveAndFlush(solicitud)));
+            SolicitudResponse respuesta = Objects.requireNonNull(
+                    tx.execute(st -> SolicitudResponse.desde(solicitudRepository.saveAndFlush(solicitud))));
             solicitudesCreadas.increment();
             log.info("Solicitud {} del animal {} creada en estado {}", respuesta.id(), animalId, respuesta.estado());
             return respuesta;

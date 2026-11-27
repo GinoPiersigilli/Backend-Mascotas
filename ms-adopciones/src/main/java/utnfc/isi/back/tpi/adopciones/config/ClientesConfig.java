@@ -57,9 +57,11 @@ public class ClientesConfig {
                 .retryExceptions(ServicioNoDisponibleException.class)
                 .build();
         Retry retry = Retry.of(nombre, config);
-        retry.getEventPublisher().onRetry(ev ->
-                log.warn("Retry '{}': intento {} tras {}", nombre, ev.getNumberOfRetryAttempts(),
-                        ev.getLastThrowable().getClass().getSimpleName()));
+        retry.getEventPublisher().onRetry(ev -> {
+            Throwable causa = ev.getLastThrowable();
+            String tipoCausa = causa != null ? causa.getClass().getSimpleName() : "desconocida";
+            log.warn("Retry '{}': intento {} tras {}", nombre, ev.getNumberOfRetryAttempts(), tipoCausa);
+        });
         return retry;
     }
 
