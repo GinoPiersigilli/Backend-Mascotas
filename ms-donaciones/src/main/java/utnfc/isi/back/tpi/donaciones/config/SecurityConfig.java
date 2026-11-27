@@ -12,6 +12,7 @@ import utnfc.isi.back.tpi.common.security.ResourceServerDefaults;
 
 import static utnfc.isi.back.tpi.common.security.Roles.ADOPTANTE;
 import static utnfc.isi.back.tpi.common.security.Roles.COORDINADOR;
+import static utnfc.isi.back.tpi.common.security.Roles.SERVICIO;
 
 /** Matriz de permisos de ms-donaciones (CONTRATOS.md 3.5 y regla D-04). */
 @Configuration
@@ -24,6 +25,8 @@ public class SecurityConfig {
         ResourceServerDefaults.aplicar(http, entryPoint, accessDeniedHandler)
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/actuator/health/**", "/actuator/info").permitAll()
+                        // Metricas Prometheus: solo en red interna y con token de servicio (ADR-04)
+                        .requestMatchers(HttpMethod.GET, "/actuator/prometheus").hasRole(SERVICIO)
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .requestMatchers("/error").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/donaciones").hasRole(ADOPTANTE)

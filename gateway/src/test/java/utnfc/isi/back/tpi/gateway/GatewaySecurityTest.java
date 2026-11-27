@@ -37,6 +37,13 @@ class GatewaySecurityTest {
     }
 
     @Test
+    void prometheusNoSeExponeEnElGateway() {
+        client.get().uri("/actuator/prometheus").exchange().expectStatus().isUnauthorized();
+        con("COORDINADOR").get().uri("/actuator/prometheus").exchange().expectStatus().isForbidden();
+        con("SERVICIO").get().uri("/actuator/prometheus").exchange().expectStatus().isForbidden();
+    }
+
+    @Test
     void sinTokenDevuelve401ConFormatoUnico() {
         client.get().uri("/api/animales").exchange()
                 .expectStatus().isUnauthorized()
