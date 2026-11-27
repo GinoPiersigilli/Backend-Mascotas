@@ -59,6 +59,6 @@ CREATE TABLE evento_solicitud (
 );
 
 CREATE INDEX idx_solicitud_adoptante_id ON solicitud (adoptante_id);
-CREATE INDEX idx_solicitud_animal_id ON solicitud (animal_id);
-CREATE INDEX idx_solicitud_estado ON solicitud (estado);
+CREATE INDEX idx_solicitud_animal_estado ON solicitud (animal_id, estado);
+CREATE INDEX idx_solicitud_estado_fecha_aprobacion ON solicitud (estado, fecha_aprobacion);
 CREATE INDEX idx_evento_solicitud_solicitud_id ON evento_solicitud (solicitud_id);

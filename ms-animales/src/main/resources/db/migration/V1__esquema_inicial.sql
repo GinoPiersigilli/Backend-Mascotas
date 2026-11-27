@@ -15,5 +15,4 @@ CREATE TABLE animal (
     version                   BIGINT       NOT NULL
 );
 
-CREATE INDEX idx_animal_estado ON animal (estado);
-CREATE INDEX idx_animal_especie ON animal (especie);
+CREATE INDEX idx_animal_estado_especie ON animal (estado, especie);
