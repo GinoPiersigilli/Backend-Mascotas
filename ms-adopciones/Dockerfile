@@ -1,16 +1,30 @@
-# Construccion en dos etapas. El contexto de build es la RAIZ del repositorio (ver docker-compose.yml).
-# Etapa 1: instala el POM padre y el JAR comun en el repositorio Maven local (.m2) de la imagen y
-# luego compila el servicio, que resuelve tpi-common como dependencia Maven local, igual que en
-# una maquina de desarrollo. No depende de ningun JAR del host.
+# Construccion en dos etapas con cache de dependencias Maven (BuildKit).
+# El contexto de build es la RAIZ del repositorio (ver docker-compose.yml).
 FROM maven:3.9-eclipse-temurin-21 AS build
 WORKDIR /workspace
-COPY . .
-RUN mvn -B -q -N install  && mvn -B -q -f tpi-common/pom.xml install -DskipTests  && mvn -B -q -f ms-adopciones/pom.xml package -DskipTests
 
-# Etapa 2: imagen liviana solo con el JRE y el JAR ejecutable del servicio.
+# 1) Copiar solo los POMs del reactor para cachear la capa de dependencias
+COPY pom.xml .
+COPY tpi-common/pom.xml tpi-common/
+COPY ms-animales/pom.xml ms-animales/
+COPY ms-adopciones/pom.xml ms-adopciones/
+COPY ms-donaciones/pom.xml ms-donaciones/
+COPY gateway/pom.xml gateway/
+RUN --mount=type=cache,target=/root/.m2 \
+    mvn -B -q -pl ms-adopciones -am dependency:go-offline -DexcludeGroupIds=utnfc.isi.back.tpi
+
+# 2) Copiar unicamente tpi-common y el codigo fuente del servicio y empaquetar
+COPY tpi-common/src tpi-common/src
+COPY ms-adopciones/src ms-adopciones/src
+RUN --mount=type=cache,target=/root/.m2 \
+    mvn -B -q -pl ms-adopciones -am package -DskipTests
+
+# Etapa 2: runtime minimo con usuario sin privilegios
 FROM eclipse-temurin:21-jre
+RUN groupadd -r app && useradd -r -g app app
 WORKDIR /app
-COPY --from=build /workspace/ms-adopciones/target/app.jar app.jar
+COPY --from=build --chown=app:app /workspace/ms-adopciones/target/app.jar app.jar
+USER app
 ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75"
 EXPOSE 8082
 ENTRYPOINT ["java", "-jar", "app.jar"]
