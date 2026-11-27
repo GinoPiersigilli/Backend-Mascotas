@@ -12,6 +12,8 @@ import utnfc.isi.back.tpi.animales.model.Especie;
 import utnfc.isi.back.tpi.animales.model.Tamanio;
 import utnfc.isi.back.tpi.animales.repository.AnimalRepository;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -26,9 +28,11 @@ public class DatosDemo implements ApplicationRunner {
     private static final Logger log = LoggerFactory.getLogger(DatosDemo.class);
 
     private final AnimalRepository repository;
+    private final Clock clock;
 
-    public DatosDemo(AnimalRepository repository) {
+    public DatosDemo(AnimalRepository repository, Clock clock) {
         this.repository = repository;
+        this.clock = clock;
     }
 
     @Override
@@ -37,16 +41,17 @@ public class DatosDemo implements ApplicationRunner {
         if (repository.count() > 0) {
             return;
         }
+        LocalDateTime ahora = LocalDateTime.now(clock);
         Animal rocco = new Animal("Rocco", Especie.PERRO, 60, Tamanio.GRANDE, "Recuperacion de una cirugia",
-                true, true, false);
-        rocco.marcarNoDisponible("Tratamiento veterinario en curso");
+                true, true, false, ahora);
+        rocco.marcarNoDisponible("Tratamiento veterinario en curso", ahora);
         repository.saveAll(List.of(
                 // Compatible con casi cualquier hogar: camino feliz
-                new Animal("Luna", Especie.PERRO, 24, Tamanio.MEDIANO, null, true, true, false),
+                new Animal("Luna", Especie.PERRO, 24, Tamanio.MEDIANO, null, true, true, false, ahora),
                 // Necesita patio (R-05: observacion) y no convive con otros animales (R-04)
-                new Animal("Toby", Especie.PERRO, 36, Tamanio.GRANDE, null, true, false, true),
+                new Animal("Toby", Especie.PERRO, 36, Tamanio.GRANDE, null, true, false, true, ahora),
                 // No apto con ninios (R-04: rechazo automatico si el hogar tiene ninios)
-                new Animal("Michi", Especie.GATO, 12, Tamanio.PEQUENIO, "Asustadizo", false, true, false),
+                new Animal("Michi", Especie.GATO, 12, Tamanio.PEQUENIO, "Asustadizo", false, true, false, ahora),
                 // NO_DISPONIBLE: no puede recibir solicitudes (R-01)
                 rocco));
         log.info("Se cargaron 4 animales de demostracion");

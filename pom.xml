@@ -35,6 +35,7 @@
         <!-- springdoc 2.8.x es la linea compatible con Spring Boot 3.5 (la 2.5.0 de la guia es anterior) -->
         <springdoc.version>2.8.17</springdoc.version>
         <jacoco.version>0.8.13</jacoco.version>
+        <shedlock.version>6.3.0</shedlock.version>
         <argLine></argLine>
     </properties>
 

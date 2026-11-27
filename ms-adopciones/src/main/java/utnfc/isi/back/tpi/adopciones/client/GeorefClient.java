@@ -4,6 +4,8 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
+import io.github.resilience4j.retry.Retry;
+import io.github.resilience4j.retry.RetryConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.client.RestClient;
@@ -31,21 +33,32 @@ public class GeorefClient {
 
     private final RestClient restClient;
     private final CircuitBreaker circuitBreaker;
+    private final Retry retry;
 
     public GeorefClient(RestClient restClient) {
         this(restClient, CircuitBreaker.of("georef", CircuitBreakerConfig.custom()
                 .recordExceptions(ServicioNoDisponibleException.class)
-                .build()));
+                .build()), sinReintento());
     }
 
     public GeorefClient(RestClient restClient, CircuitBreaker circuitBreaker) {
+        this(restClient, circuitBreaker, sinReintento());
+    }
+
+    public GeorefClient(RestClient restClient, CircuitBreaker circuitBreaker, Retry retry) {
         this.restClient = restClient;
         this.circuitBreaker = circuitBreaker;
+        this.retry = retry;
+    }
+
+    private static Retry sinReintento() {
+        return Retry.of("georef-sin-retry", RetryConfig.custom().maxAttempts(1).build());
     }
 
     public Optional<Coordenadas> geolocalizar(String direccion, String localidad, String provincia) {
         try {
-            return circuitBreaker.executeSupplier(() -> consultarGeoref(direccion, localidad, provincia));
+            return circuitBreaker.executeSupplier(
+                    () -> retry.executeSupplier(() -> consultarGeoref(direccion, localidad, provincia)));
         } catch (CallNotPermittedException e) {
             log.warn("CircuitBreaker '{}' abierto: Georef omitido temporalmente", circuitBreaker.getName());
             throw new ServicioNoDisponibleException("La API Georef no esta disponible temporalmente", e);

@@ -4,6 +4,9 @@ server:
 spring:
   application:
     name: ms-donaciones
+  threads:
+    virtual:
+      enabled: true
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5433/tpi}
     username: ${DB_USER:donaciones_user}
@@ -47,6 +50,9 @@ donaciones:
       minimum-number-of-calls: ${MP_CB_MIN_CALLS:5}
       wait-duration-in-open-state: ${MP_CB_WAIT_OPEN:30s}
       permitted-number-of-calls-in-half-open-state: ${MP_CB_HALF_OPEN_CALLS:2}
+    retry:
+      max-attempts: ${MP_RETRY_MAX_ATTEMPTS:3}
+      wait-duration: ${MP_RETRY_WAIT:200ms}
 
 springdoc:
   api-docs:

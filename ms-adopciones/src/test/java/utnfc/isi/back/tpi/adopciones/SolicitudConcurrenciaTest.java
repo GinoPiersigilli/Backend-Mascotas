@@ -107,7 +107,7 @@ class SolicitudConcurrenciaTest {
             return null;
         }).when(animales).asegurarToken();
 
-        when(animales.cambiarEstado(1L, EstadoAnimal.RESERVADO)).thenAnswer(inv -> {
+        when(animales.cambiarEstado(1L, EstadoAnimal.RESERVADO, solicitudId)).thenAnswer(inv -> {
             Thread.sleep(250);
             return new AnimalDto(1L, "Luna", EstadoAnimal.RESERVADO, true, true, false);
         });
@@ -140,7 +140,7 @@ class SolicitudConcurrenciaTest {
         }
 
         // ADR-06: el flush previo detecto la concurrencia antes de invocar dos veces a ms-animales
-        verify(animales, times(1)).cambiarEstado(1L, EstadoAnimal.RESERVADO);
+        verify(animales, times(1)).cambiarEstado(1L, EstadoAnimal.RESERVADO, solicitudId);
         Solicitud finalizada = solicitudRepository.findById(solicitudId).orElseThrow();
         assertThat(finalizada.getEstado()).isEqualTo(EstadoSolicitud.APROBADA);
         assertThat(finalizada.getVersion()).isEqualTo(1L);

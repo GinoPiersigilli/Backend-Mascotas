@@ -113,11 +113,21 @@ public class AnimalService {
      */
     @Transactional
     public AnimalResponse cambiarEstadoPorProceso(Long id, EstadoAnimal nuevoEstado) {
+        return cambiarEstadoPorProceso(id, nuevoEstado, null);
+    }
+
+    @Transactional
+    public AnimalResponse cambiarEstadoPorProceso(Long id, EstadoAnimal nuevoEstado, Long solicitudId) {
         Animal animal = buscar(id);
         EstadoAnimal anterior = animal.getEstado();
-        animal.cambiarEstadoPorProceso(nuevoEstado, LocalDateTime.now(clock));
+        animal.cambiarEstadoPorProceso(nuevoEstado, LocalDateTime.now(clock), solicitudId);
         repository.saveAndFlush(animal);
-        log.info("Animal {}: {} -> {} (pedido por el proceso de adopcion)", id, anterior, nuevoEstado);
+        if (anterior == nuevoEstado) {
+            log.info("Animal {}: reintento idempotente en {} (solicitud {})", id, nuevoEstado, solicitudId);
+        } else {
+            log.info("Animal {}: {} -> {} (pedido por el proceso de adopcion, solicitud {})",
+                    id, anterior, nuevoEstado, solicitudId);
+        }
         return AnimalResponse.desde(animal);
     }
 

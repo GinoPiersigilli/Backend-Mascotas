@@ -2,6 +2,8 @@ package utnfc.isi.back.tpi.donaciones.config;
 
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
+import io.github.resilience4j.retry.Retry;
+import io.github.resilience4j.retry.RetryConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
@@ -46,6 +48,15 @@ public class ClientesConfig {
                 .build());
         cb.getEventPublisher().onStateTransition(ev ->
                 log.warn("CircuitBreaker 'mercadoPago': {}", ev.getStateTransition()));
-        return new MercadoPagoClient(restClient, mp.usarSandboxInitPoint(), cb);
+        DonacionesProperties.Reintento retryCfg = mp.retry();
+        Retry retryConsulta = Retry.of("mercadoPagoConsulta", RetryConfig.custom()
+                .maxAttempts(retryCfg.maxAttempts())
+                .waitDuration(retryCfg.waitDuration())
+                .retryExceptions(ServicioNoDisponibleException.class)
+                .build());
+        retryConsulta.getEventPublisher().onRetry(ev ->
+                log.warn("Retry 'mercadoPagoConsulta': intento {} tras {}", ev.getNumberOfRetryAttempts(),
+                        ev.getLastThrowable().getClass().getSimpleName()));
+        return new MercadoPagoClient(restClient, mp.usarSandboxInitPoint(), cb, retryConsulta);
     }
 }

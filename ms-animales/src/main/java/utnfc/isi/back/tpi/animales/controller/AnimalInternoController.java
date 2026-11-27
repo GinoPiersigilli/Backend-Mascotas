@@ -62,6 +62,8 @@ public class AnimalInternoController {
             content = @Content(mediaType = "application/json", schema = @Schema(implementation = ErrorResponse.class)))
     public AnimalResponse cambiarEstado(@Parameter(example = "1") @PathVariable Long id,
                                         @Valid @RequestBody CambioEstadoRequest request) {
-        return service.cambiarEstadoPorProceso(id, request.nuevoEstado());
+        return request.solicitudId() == null
+                ? service.cambiarEstadoPorProceso(id, request.nuevoEstado())
+                : service.cambiarEstadoPorProceso(id, request.nuevoEstado(), request.solicitudId());
     }
 }

@@ -5,6 +5,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
+import io.github.resilience4j.retry.Retry;
+import io.github.resilience4j.retry.RetryConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -40,19 +42,31 @@ public class MercadoPagoClient {
     private final RestClient restClient;
     private final boolean usarSandboxInitPoint;
     private final CircuitBreaker circuitBreaker;
+    private final Retry retryConsulta;
 
     public MercadoPagoClient(RestClient restClient, boolean usarSandboxInitPoint) {
         this(restClient, usarSandboxInitPoint, CircuitBreaker.of("mercadoPago", CircuitBreakerConfig.custom()
                 .recordExceptions(ServicioNoDisponibleException.class)
-                .build()));
+                .build()), sinReintento());
     }
 
     public MercadoPagoClient(RestClient restClient, boolean usarSandboxInitPoint, CircuitBreaker circuitBreaker) {
+        this(restClient, usarSandboxInitPoint, circuitBreaker, sinReintento());
+    }
+
+    public MercadoPagoClient(RestClient restClient, boolean usarSandboxInitPoint, CircuitBreaker circuitBreaker,
+                             Retry retryConsulta) {
         this.restClient = restClient;
         this.usarSandboxInitPoint = usarSandboxInitPoint;
         this.circuitBreaker = circuitBreaker;
+        this.retryConsulta = retryConsulta;
     }
 
+    private static Retry sinReintento() {
+        return Retry.of("mercadoPago-sin-retry", RetryConfig.custom().maxAttempts(1).build());
+    }
+
+    /** POST no idempotente: protegido por circuit breaker pero NUNCA reintentado automaticamente. */
     public Cobro crearCobro(String referencia, BigDecimal monto, String titulo) {
         return ejecutarConCircuito(() -> solicitarPreferencia(referencia, monto, titulo));
     }
@@ -89,9 +103,9 @@ public class MercadoPagoClient {
         return new Cobro(preferencia.id(), link);
     }
 
-    /** Devuelve el pago aprobado asociado a la referencia, si existe. */
+    /** GET idempotente: devuelve el pago aprobado asociado a la referencia (con retry ante fallas transitorias). */
     public Optional<String> buscarPagoAprobado(String referencia) {
-        return ejecutarConCircuito(() -> consultarPagos(referencia));
+        return ejecutarConCircuito(() -> retryConsulta.executeSupplier(() -> consultarPagos(referencia)));
     }
 
     private Optional<String> consultarPagos(String referencia) {

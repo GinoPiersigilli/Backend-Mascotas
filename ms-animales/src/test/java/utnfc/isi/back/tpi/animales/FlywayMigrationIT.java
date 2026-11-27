@@ -38,13 +38,17 @@ class FlywayMigrationIT {
     @Test
     void migracionInicialValidaEntidadesYPermitePersistir() {
         Integer migraciones = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM animales.flyway_schema_history WHERE version = '1' AND success = true",
+                "SELECT COUNT(*) FROM animales.flyway_schema_history WHERE version IN ('1', '2') AND success = true",
                 Integer.class);
-        assertThat(migraciones).isEqualTo(1);
+        assertThat(migraciones).isEqualTo(2);
 
         Animal guardado = animalRepository.saveAndFlush(new Animal(
                 "Luna", Especie.PERRO, 24, Tamanio.MEDIANO, null, true, true, false));
         assertThat(guardado.getId()).isNotNull();
-        assertThat(animalRepository.findById(guardado.getId())).isPresent();
+        guardado.cambiarEstadoPorProceso(utnfc.isi.back.tpi.animales.model.EstadoAnimal.RESERVADO,
+                java.time.LocalDateTime.of(2026, 5, 1, 10, 0), 42L);
+        animalRepository.saveAndFlush(guardado);
+        assertThat(animalRepository.findById(guardado.getId())).get()
+                .extracting(Animal::getSolicitudActivaId).isEqualTo(42L);
     }
 }

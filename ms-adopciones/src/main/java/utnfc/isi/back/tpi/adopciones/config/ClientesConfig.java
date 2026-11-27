@@ -2,6 +2,8 @@ package utnfc.isi.back.tpi.adopciones.config;
 
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
+import io.github.resilience4j.retry.Retry;
+import io.github.resilience4j.retry.RetryConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
@@ -48,6 +50,19 @@ public class ClientesConfig {
         return cb;
     }
 
+    private static Retry crearReintento(String nombre, IntegracionesProperties.Reintento cfg) {
+        RetryConfig config = RetryConfig.custom()
+                .maxAttempts(cfg.maxAttempts())
+                .waitDuration(cfg.waitDuration())
+                .retryExceptions(ServicioNoDisponibleException.class)
+                .build();
+        Retry retry = Retry.of(nombre, config);
+        retry.getEventPublisher().onRetry(ev ->
+                log.warn("Retry '{}': intento {} tras {}", nombre, ev.getNumberOfRetryAttempts(),
+                        ev.getLastThrowable().getClass().getSimpleName()));
+        return retry;
+    }
+
     @Bean
     Clock clock() {
         return Clock.systemDefaultZone();
@@ -81,6 +96,8 @@ public class ClientesConfig {
                 .baseUrl(cfg.baseUrl())
                 .requestFactory(conTimeouts(cfg.connectTimeout(), cfg.readTimeout()))
                 .build();
-        return new GeorefClient(restClient, crearCircuito("georef", cfg.circuitBreaker()));
+        return new GeorefClient(restClient,
+                crearCircuito("georef", cfg.circuitBreaker()),
+                crearReintento("georef", cfg.retry()));
     }
 }

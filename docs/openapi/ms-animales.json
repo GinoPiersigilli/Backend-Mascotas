@@ -104,6 +104,12 @@
             "enum" : [ "DISPONIBLE", "RESERVADO", "EN_ADAPTACION", "ADOPTADO", "NO_DISPONIBLE" ],
             "example" : "RESERVADO",
             "type" : "string"
+          },
+          "solicitudId" : {
+            "description" : "Identificador opcional de la solicitud para transiciones idempotentes",
+            "example" : 42,
+            "format" : "int64",
+            "type" : [ "integer", "null" ]
           }
         },
         "required" : [ "nuevoEstado" ],
