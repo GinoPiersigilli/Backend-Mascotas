@@ -4,6 +4,8 @@ server:
 spring:
   application:
     name: gateway
+  reactor:
+    context-propagation: auto
   security:
     oauth2:
       resourceserver:
@@ -41,4 +43,4 @@ management:
 
 logging:
   pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} %-5level [gateway] %logger{36} - %msg%n"
+    console: "%d{yyyy-MM-dd HH:mm:ss} %-5level [gateway] [%X{correlationId}] %logger{36} - %msg%n"
