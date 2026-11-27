@@ -8,10 +8,14 @@ spring:
     url: ${DB_URL:jdbc:postgresql://localhost:5433/tpi}
     username: ${DB_USER:animales_user}
     password: ${DB_PASSWORD:animales_pass}
+  flyway:
+    default-schema: animales
+    schemas:
+      - animales
   jpa:
     open-in-view: false
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     properties:
       hibernate:
         # Cada servicio trabaja solo en su esquema; su usuario no tiene permisos sobre los otros

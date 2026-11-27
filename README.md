@@ -144,6 +144,7 @@ Las 14 decisiones arquitectónicas completas están documentadas en [docs/ADR.md
 ### Persistencia
 
 - Una instancia PostgreSQL 17 para negocio con un esquema y un usuario dueño por servicio ([infra/postgres/init/01-esquemas.sh](infra/postgres/init/01-esquemas.sh)): ningún servicio tiene permisos sobre las tablas de otro.
+- Esquemas versionados con **Flyway** (`src/main/resources/db/migration/V1__esquema_inicial.sql` en cada servicio) y Hibernate configurado con `ddl-auto: validate`.
 - Instancia PostgreSQL dedicada para Keycloak (`keycloak-db`).
 - Volúmenes nombrados (`tpi-postgres-data`, `tpi-keycloak-db-data`) para preservar datos entre reinicios.
 
@@ -194,8 +195,11 @@ Las 14 decisiones arquitectónicas completas están documentadas en [docs/ADR.md
 Las pruebas automatizadas no requieren Docker, Keycloak ni acceso a Internet: usan H2 en modo PostgreSQL, `MockRestServiceServer` para contratos HTTP externos, `@MockitoBean` en flujos de integración, `Clock` inyectable para vencimientos y `jwt()`/`mockJwt()` de Spring Security Test.
 
 ```bash
-# Compila el reactor una sola vez, ejecuta toda la suite y genera reportes JaCoCo
+# Compila el reactor una sola vez, ejecuta la suite sin Docker y genera reportes JaCoCo
 mvn -B clean verify
+
+# Ejecuta además las pruebas de integración con Testcontainers (PostgreSQL 17 + Flyway + ddl-auto: validate, requiere Docker)
+mvn -B verify -Pintegration-tests
 ```
 
 | Módulo | Cobertura de pruebas |
@@ -205,6 +209,8 @@ mvn -B clean verify
 | `ms-adopciones` | Agregado `Solicitud` (R-07..R-12), `EvaluadorSolicitud` (R-04..R-06), Haversine, clientes HTTP (`AnimalesClient`, `GeorefClient`, `ServiceTokenProvider`), unicidad `UNIQUE`, flujo end-to-end por HTTP con seguridad, tolerancia a fallas y vencimientos con reloj controlado |
 | `ms-donaciones` | `MercadoPagoClient` (contratos y fallas), flujo completo D-01..D-04 |
 | `gateway` | 401/403, bloqueo de `/internal/**`, servicio caído → `503`, correlación y `404` |
+
+Los tests de integración con Testcontainers (`*IT.java`, etiquetados `@Tag("integration")`) se excluyen por defecto para que `mvn clean test` y `mvn verify` corran sin Docker, y se activan mediante el perfil Maven `-Pintegration-tests` (`maven-failsafe-plugin`).
 
 Los reportes de cobertura de **JaCoCo** se generan localmente en `<módulo>/target/site/jacoco/index.html` y se publican automáticamente como artifact (`jacoco-reports`) en cada ejecución del workflow de GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)).
 
@@ -216,12 +222,10 @@ Los reportes de cobertura de **JaCoCo** se generan localmente en `<módulo>/targ
 - **Cálculo de distancia:** se calcula en línea recta (Haversine) y no por distancia vial real.
 - **Sin webhooks de Mercado Pago:** al ejecutarse en entorno local sin HTTPS público, el estado de una donación se sincroniza por consulta (*polling* bajo demanda) en lugar de notificaciones *push*.
 - **Consistencia entre servicios:** no hay patrón Outbox ni reconciliación automática; si `ms-animales` confirma una reserva y el *commit* local de `ms-adopciones` falla inmediatamente después, requiere intervención manual ([ADR-06](docs/ADR.md#adr-06-consistencia-entre-servicios-sin-transacción-distribuida)).
-- **Evolución de esquema:** se usa `hibernate.ddl-auto: update` sin migraciones versionadas.
 - **Configuración de Keycloak local:** se utiliza `start-dev` (HTTP sin TLS) y *Resource Owner Password Grant* en `tpi-client` para facilitar pruebas locales y desde Postman.
 - **Seguimiento de vencimientos:** la tarea programada automatiza R-09 (entrega vencida); los controles finales vencidos (R-11) se consultan filtrando solicitudes `EN_ADAPTACION` por `fechaControl`.
 
 ### Próximos pasos
-- Incorporar **Flyway** para versionar los esquemas de cada microservicio y pasar JPA a `ddl-auto: validate`.
 - Implementar un **Outbox transaccional** o una tarea de reconciliación periódica para cubrir el caso residual de [ADR-06](docs/ADR.md#adr-06-consistencia-entre-servicios-sin-transacción-distribuida).
 - Añadir un endpoint de **webhook de Mercado Pago** con verificación de firma sobre HTTPS.
 - Migrar la autenticación de usuarios a **Authorization Code + PKCE** cuando se integre un frontend, deshabilitando *password grant* y usando Keycloak en modo producción detrás de TLS.
