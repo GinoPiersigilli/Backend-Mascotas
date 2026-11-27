@@ -1,0 +1,2 @@
+# False positive: plain internal JDBC URL without credentials (KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak)
+7b4c66b46f305caadcb38113b9434365cd765f01:docker-compose.yml:generic-api-key:69

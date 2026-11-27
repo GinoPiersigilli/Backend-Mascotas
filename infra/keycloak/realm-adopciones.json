@@ -16,13 +16,28 @@
   "clients": [
     {
       "clientId": "tpi-client",
-      "name": "Cliente de usuarios (Postman / frontend)",
+      "name": "Cliente de usuarios demo (solo desarrollo local / Postman con password grant)",
       "enabled": true,
       "protocol": "openid-connect",
       "publicClient": true,
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": true,
       "serviceAccountsEnabled": false,
+      "redirectUris": ["http://localhost:*", "https://oauth.pstmn.io/v1/callback"],
+      "webOrigins": ["+"]
+    },
+    {
+      "clientId": "adopciones-pkce",
+      "name": "Cliente publico recomendado (Authorization Code + PKCE S256, sin password grant)",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
       "redirectUris": ["http://localhost:*", "https://oauth.pstmn.io/v1/callback"],
       "webOrigins": ["+"]
     },

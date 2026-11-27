@@ -1,0 +1,12 @@
+# Excepciones VEX (not_affected) para Spring Framework 6.2.19 (ultima release OSS de Spring Boot 3.5.x).
+# El unico parche upstream existe en Spring Framework 7.0.9 (Spring Boot 4.x, fuera de contrato 3.5.x).
+# Todas las demas CVEs (pgjdbc, Jackson, Tomcat, Netty, Bouncy Castle) fueron parcheadas en pom.xml.
+
+# CVE-2026-47884: RCE via XsltView en Spring MVC. No afectado: los servicios exponen solo APIs REST JSON (sin vistas XSLT).
+CVE-2026-47884
+
+# CVE-2026-47890: Corrupcion de stream en Server-Sent Events (SSE) con renderizado de vistas. No afectado: no se usa SSE ni vistas.
+CVE-2026-47890
+
+# CVE-2026-47892: Header Predicate Bypass en WebFlux Functional Endpoints (RouterFunction). No afectado: el Gateway no define Functional Endpoints ni predicados Header.
+CVE-2026-47892

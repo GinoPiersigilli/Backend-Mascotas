@@ -1,0 +1,124 @@
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 6 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  codeql:
+    name: CodeQL (Java)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: java-kotlin
+          queries: security-extended
+
+      - name: Build for CodeQL analysis
+        run: mvn -B -DskipTests compile
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:java"
+
+  gitleaks:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run gitleaks over git history
+        run: |
+          docker run --rm -v "${{ github.workspace }}:/repo:ro" \
+            ghcr.io/gitleaks/gitleaks:v8.24.2 \
+            detect --source=/repo --gitleaks-ignore-path=/repo/.gitleaksignore --verbose --redact
+
+  trivy-fs:
+    name: Trivy filesystem & IaC scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability & misconfig scanner
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,misconfig,secret
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          trivyignores: '.trivyignore'
+          format: table
+          exit-code: '1'
+
+  trivy-images:
+    name: Trivy Docker image scan
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [ms-animales, ms-adopciones, ms-donaciones, gateway]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build image (${{ matrix.service }})
+        run: docker build -f ${{ matrix.service }}/Dockerfile -t local/${{ matrix.service }}:scan .
+
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: local/${{ matrix.service }}:scan
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          trivyignores: '.trivyignore'
+          format: table
+          exit-code: '1'
+
+  dependency-review:
+    name: Dependency Review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
