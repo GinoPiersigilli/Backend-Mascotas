@@ -28,6 +28,8 @@ public class SecurityConfig {
         ResourceServerDefaults.aplicar(http, entryPoint, accessDeniedHandler)
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/actuator/health/**", "/actuator/info").permitAll()
+                        // Metricas Prometheus: solo en red interna y con token de servicio (ADR-04)
+                        .requestMatchers(HttpMethod.GET, "/actuator/prometheus").hasRole(SERVICIO)
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .requestMatchers("/error").permitAll()
                         // API interna: solo el token de servicio de Adopciones

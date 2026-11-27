@@ -1,5 +1,7 @@
 package utnfc.isi.back.tpi.adopciones.service;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -58,10 +60,12 @@ public class SolicitudService {
     private final TransactionTemplate tx;
     private final TransactionTemplate txReadOnly;
     private final Clock clock;
+    private final Counter solicitudesCreadas;
+    private final Counter solicitudesAprobadas;
 
     public SolicitudService(SolicitudRepository solicitudRepository, PerfilRepository perfilRepository,
                             AnimalesClient animalesClient, EvaluadorSolicitud evaluador, PoliticaAdopcion politica,
-                            PlatformTransactionManager transactionManager, Clock clock) {
+                            PlatformTransactionManager transactionManager, Clock clock, MeterRegistry meterRegistry) {
         this.solicitudRepository = solicitudRepository;
         this.perfilRepository = perfilRepository;
         this.animalesClient = animalesClient;
@@ -71,6 +75,12 @@ public class SolicitudService {
         this.txReadOnly = new TransactionTemplate(transactionManager);
         this.txReadOnly.setReadOnly(true);
         this.clock = clock;
+        this.solicitudesCreadas = Counter.builder("adopciones.solicitudes.creadas")
+                .description("Total de solicitudes de adopcion creadas")
+                .register(meterRegistry);
+        this.solicitudesAprobadas = Counter.builder("adopciones.solicitudes.aprobadas")
+                .description("Total de solicitudes de adopcion aprobadas")
+                .register(meterRegistry);
     }
 
     // ------------------------------------------------------------------ P2: presentar
@@ -115,6 +125,7 @@ public class SolicitudService {
 
         try {
             SolicitudResponse respuesta = tx.execute(st -> SolicitudResponse.desde(solicitudRepository.saveAndFlush(solicitud)));
+            solicitudesCreadas.increment();
             log.info("Solicitud {} del animal {} creada en estado {}", respuesta.id(), animalId, respuesta.estado());
             return respuesta;
         } catch (DataIntegrityViolationException e) {
@@ -173,8 +184,10 @@ public class SolicitudService {
 
     /** R-07: aprueba y pide a Animales reservar al animal. Si Animales no confirma, no se aprueba. */
     public SolicitudResponse aprobar(Usuario usuario, Long id, String justificacion) {
-        return conCambioDeAnimal(id, EstadoAnimal.RESERVADO,
+        SolicitudResponse respuesta = conCambioDeAnimal(id, EstadoAnimal.RESERVADO,
                 s -> s.aprobar(justificacion, LocalDateTime.now(clock), usuario.id()));
+        solicitudesAprobadas.increment();
+        return respuesta;
     }
 
     /** R-08: el rechazo no toca al animal, que sigue DISPONIBLE. */

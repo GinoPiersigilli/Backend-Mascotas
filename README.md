@@ -139,7 +139,16 @@ Las 14 decisiones arquitectónicas completas están documentadas en [docs/ADR.md
 | Sin token | `/actuator/health` (y Swagger UI directo en cada servicio si `SWAGGER_ENABLED=true`) |
 | `ADOPTANTE` | Su perfil; crear, consultar y cancelar sus solicitudes; pedir devolución; consultar animales; donar y consultar sus donaciones |
 | `COORDINADOR` | Administrar animales; listar y decidir solicitudes; consultar perfiles de postulantes; confirmar entrega y control final; consultar todas las donaciones y el total confirmado |
-| `SERVICIO` | Exclusivamente `/internal/animales/**` |
+| `SERVICIO` | Exclusivamente `/internal/animales/**` y lectura interna de métricas (`GET /actuator/prometheus`) |
+
+### Observabilidad y métricas
+
+- Cada microservicio (`ms-animales`, `ms-adopciones`, `ms-donaciones`) incorpora `micrometer-registry-prometheus` y expone `GET /actuator/prometheus` únicamente dentro de la red interna `tpi-net` (el API Gateway no expone ni enruta `/actuator/prometheus`, manteniendo solo `health` e `info`).
+- Coherente con la defensa en profundidad de [ADR-04](docs/ADR.md#adr-04-seguridad-en-dos-capas-y-token-de-servicio-trusted-zone), `GET /actuator/prometheus` exige un JWT válido de Keycloak con rol `SERVICIO` (`401` sin token, `403` para roles de usuario `ADOPTANTE` o `COORDINADOR`). Todas las series incluyen la etiqueta común `application` (`ms-animales`, `ms-adopciones`, `ms-donaciones`).
+- **Métricas de negocio en `ms-adopciones`:**
+  - `adopciones_solicitudes_creadas_total` (`adopciones.solicitudes.creadas`): contador de solicitudes de adopción creadas correctamente.
+  - `adopciones_solicitudes_aprobadas_total` (`adopciones.solicitudes.aprobadas`): contador de solicitudes aprobadas tras confirmar la reserva en `ms-animales`.
+- No se incluye un servidor Prometheus/Grafana en `docker-compose.yml` para mantener liviano el stack local; un scraper externo en `tpi-net` (o `curl` en desarrollo usando `docker-compose.override.yml`) solo necesita un token `client_credentials` con rol `SERVICIO` en `Authorization: Bearer <token>`.
 
 ### Persistencia
 
@@ -229,7 +238,7 @@ Los reportes de cobertura de **JaCoCo** se generan localmente en `<módulo>/targ
 - Implementar un **Outbox transaccional** o una tarea de reconciliación periódica para cubrir el caso residual de [ADR-06](docs/ADR.md#adr-06-consistencia-entre-servicios-sin-transacción-distribuida).
 - Añadir un endpoint de **webhook de Mercado Pago** con verificación de firma sobre HTTPS.
 - Migrar la autenticación de usuarios a **Authorization Code + PKCE** cuando se integre un frontend, deshabilitando *password grant* y usando Keycloak en modo producción detrás de TLS.
-- Exponer métricas y trazas distribuidas (**Micrometer + OpenTelemetry / Prometheus**) sobre el `X-Correlation-ID` existente.
+- Sumar trazas distribuidas (**OpenTelemetry**) sobre el `X-Correlation-ID` existente y conectar un stack de scraping/dashboards (**Prometheus + Grafana**) sobre los endpoints `/actuator/prometheus` ya expuestos.
 
 <!-- TODO: agregar enlace a despliegue en vivo o colección pública si se publica en cloud -->
 
