@@ -1,0 +1,14 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPath": "/v1/payments/search"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "transformers": ["response-template"],
+    "body": "{\"results\":[{\"id\":{{randomInt lower=100000000 upper=999999999}},\"status\":\"approved\",\"external_reference\":\"{{request.query.external_reference}}\"}]}"
+  }
+}

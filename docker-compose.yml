@@ -167,6 +167,7 @@ services:
       DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
       DB_USER: ${DONACIONES_DB_USER}
       DB_PASSWORD: ${DONACIONES_DB_PASSWORD}
+      MP_BASE_URL: ${MP_BASE_URL:-https://api.mercadopago.com}
       MP_ACCESS_TOKEN: ${MP_ACCESS_TOKEN}
       MP_USAR_SANDBOX_INIT_POINT: ${MP_USAR_SANDBOX_INIT_POINT:-false}
       DONACION_MONTO_MINIMO: ${DONACION_MONTO_MINIMO:-1}

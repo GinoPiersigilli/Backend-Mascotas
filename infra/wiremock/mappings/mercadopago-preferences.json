@@ -1,0 +1,14 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/checkout/preferences"
+  },
+  "response": {
+    "status": 201,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "transformers": ["response-template"],
+    "body": "{\"id\":\"demo-pref-{{randomValue type='UUID'}}\",\"init_point\":\"https://demo.mercadopago.local/checkout/v1/redirect?pref_id={{jsonPath request.body '$.external_reference'}}\",\"sandbox_init_point\":\"https://sandbox.demo.mercadopago.local/checkout/v1/redirect?pref_id={{jsonPath request.body '$.external_reference'}}\"}"
+  }
+}

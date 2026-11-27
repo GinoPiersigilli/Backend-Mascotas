@@ -1,0 +1,25 @@
+{
+  "priority": 5,
+  "request": {
+    "method": "GET",
+    "urlPath": "/georef/api/v2.0/direcciones"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "cantidad": 1,
+      "direcciones": [
+        {
+          "nomenclatura": "AV. COLON 1000, Cordoba, Cordoba",
+          "ubicacion": {
+            "lat": -31.4096,
+            "lon": -64.1966
+          }
+        }
+      ]
+    }
+  }
+}
