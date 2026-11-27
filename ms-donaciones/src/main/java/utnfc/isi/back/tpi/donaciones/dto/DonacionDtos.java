@@ -29,15 +29,15 @@ public final class DonacionDtos {
      * proveedor no pudo consultarse y el estado podria estar desactualizado.
      */
     public record DonacionResponse(
-            Long id,
-            String donanteId,
-            BigDecimal monto,
-            String moneda,
-            EstadoDonacion estado,
-            LocalDateTime fechaCreacion,
-            LocalDateTime fechaActualizacion,
-            String linkPago,
-            boolean verificado) {
+            @Schema(example = "1") Long id,
+            @Schema(example = "adoptante-sub-1") String donanteId,
+            @Schema(example = "500.00") BigDecimal monto,
+            @Schema(example = "ARS") String moneda,
+            @Schema(example = "PENDIENTE") EstadoDonacion estado,
+            @Schema(example = "2026-10-27T13:00:00") LocalDateTime fechaCreacion,
+            @Schema(example = "2026-10-27T13:00:00") LocalDateTime fechaActualizacion,
+            @Schema(example = "https://www.mercadopago.com.ar/checkout/v1/redirect?pref_id=pref-1") String linkPago,
+            @Schema(example = "true") boolean verificado) {
 
         public static DonacionResponse desde(Donacion d, boolean verificado) {
             return new DonacionResponse(d.getId(), d.getDonanteId(), d.getMonto(), d.getMoneda(), d.getEstado(),
@@ -45,6 +45,8 @@ public final class DonacionDtos {
         }
     }
 
-    public record TotalResponse(BigDecimal totalConfirmado, long cantidad) {
+    public record TotalResponse(
+            @Schema(example = "1500.00") BigDecimal totalConfirmado,
+            @Schema(example = "3") long cantidad) {
     }
 }

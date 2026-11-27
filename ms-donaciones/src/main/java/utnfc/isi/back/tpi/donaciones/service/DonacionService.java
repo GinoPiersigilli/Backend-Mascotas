@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import utnfc.isi.back.tpi.common.exception.AccesoDenegadoException;
+import utnfc.isi.back.tpi.common.exception.ConflictoException;
 import utnfc.isi.back.tpi.common.exception.RecursoNoEncontradoException;
 import utnfc.isi.back.tpi.common.exception.ServicioNoDisponibleException;
 import utnfc.isi.back.tpi.donaciones.client.MercadoPagoClient;
@@ -20,8 +21,12 @@ import utnfc.isi.back.tpi.donaciones.model.EstadoDonacion;
 import utnfc.isi.back.tpi.donaciones.repository.DonacionRepository;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -58,14 +63,63 @@ public class DonacionService {
      * guardar: no queda ninguna donacion registrada sin enlace de pago.
      */
     public DonacionResponse crear(String donanteId, BigDecimal monto) {
+        return crear(donanteId, monto, null);
+    }
+
+    /**
+     * Crea una donacion con soporte opcional de {@code Idempotency-Key} acotada por donante (ADR-18):
+     * misma clave + mismo monto devuelve la donacion existente sin cobrar dos veces; misma clave +
+     * monto distinto responde 409 Conflict.
+     */
+    public DonacionResponse crear(String donanteId, BigDecimal monto, String idempotencyKey) {
         Donacion.validarMonto(monto, props.montoMinimo());
+        String clave = (idempotencyKey == null || idempotencyKey.isBlank()) ? null : idempotencyKey.trim();
+        String hash = clave == null ? null : hashSolicitud(monto);
+
+        if (clave != null) {
+            Optional<Donacion> existente = txReadOnly.execute(
+                    st -> repository.findByDonanteIdAndIdempotencyKey(donanteId, clave));
+            if (existente.isPresent()) {
+                return resolverIdempotencia(existente.get(), hash);
+            }
+        }
+
         String referencia = UUID.randomUUID().toString();
         MercadoPagoClient.Cobro cobro = mercadoPago.crearCobro(referencia, monto, props.mercadoPago().tituloItem());
         Donacion donacion = new Donacion(referencia, donanteId, monto, cobro.preferenciaId(), cobro.linkPago(),
-                LocalDateTime.now(clock));
-        DonacionResponse respuesta = tx.execute(st -> DonacionResponse.desde(repository.save(donacion), true));
-        log.info("Donacion {} creada PENDIENTE por {} ARS", respuesta.id(), monto);
-        return respuesta;
+                LocalDateTime.now(clock), clave, hash);
+        try {
+            DonacionResponse respuesta = tx.execute(st -> DonacionResponse.desde(repository.saveAndFlush(donacion), true));
+            log.info("Donacion {} creada PENDIENTE por {} ARS", respuesta.id(), monto);
+            return respuesta;
+        } catch (DataIntegrityViolationException e) {
+            if (clave != null) {
+                Optional<Donacion> ganadora = txReadOnly.execute(
+                        st -> repository.findByDonanteIdAndIdempotencyKey(donanteId, clave));
+                if (ganadora.isPresent()) {
+                    return resolverIdempotencia(ganadora.get(), hash);
+                }
+            }
+            throw e;
+        }
+    }
+
+    private DonacionResponse resolverIdempotencia(Donacion existente, String hashActual) {
+        if (!hashActual.equals(existente.getRequestHash())) {
+            throw new ConflictoException("La clave de idempotencia ya fue utilizada con un monto diferente");
+        }
+        log.info("Reutilizando donacion {} por Idempotency-Key sin duplicar cobro", existente.getId());
+        return DonacionResponse.desde(existente, existente.getEstado() == EstadoDonacion.CONFIRMADA);
+    }
+
+    private static String hashSolicitud(BigDecimal monto) {
+        String canonico = monto.stripTrailingZeros().toPlainString() + "|" + Donacion.MONEDA;
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            return HexFormat.of().formatHex(md.digest(canonico.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 no disponible en la JVM", e);
+        }
     }
 
     /** D-04: el donante ve las suyas; el Coordinador, todas. No consulta al proveedor. */

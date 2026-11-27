@@ -1,0 +1,415 @@
+{
+  "components" : {
+    "schemas" : {
+      "CampoError" : {
+        "properties" : {
+          "campo" : {
+            "type" : "string"
+          },
+          "mensaje" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "CrearDonacion" : {
+        "properties" : {
+          "monto" : {
+            "example" : 500,
+            "type" : "number"
+          }
+        },
+        "required" : [ "monto" ],
+        "type" : "object"
+      },
+      "DonacionResponse" : {
+        "properties" : {
+          "donanteId" : {
+            "example" : "adoptante-sub-1",
+            "type" : "string"
+          },
+          "estado" : {
+            "enum" : [ "PENDIENTE", "CONFIRMADA" ],
+            "example" : "PENDIENTE",
+            "type" : "string"
+          },
+          "fechaActualizacion" : {
+            "example" : "2026-10-27T13:00:00",
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "fechaCreacion" : {
+            "example" : "2026-10-27T13:00:00",
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "id" : {
+            "example" : 1,
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "linkPago" : {
+            "example" : "https://www.mercadopago.com.ar/checkout/v1/redirect?pref_id=pref-1",
+            "type" : "string"
+          },
+          "moneda" : {
+            "example" : "ARS",
+            "type" : "string"
+          },
+          "monto" : {
+            "example" : 500.0,
+            "type" : "number"
+          },
+          "verificado" : {
+            "example" : true,
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ErrorResponse" : {
+        "properties" : {
+          "error" : {
+            "type" : "string"
+          },
+          "errores" : {
+            "items" : {
+              "$ref" : "#/components/schemas/CampoError"
+            },
+            "type" : "array"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "path" : {
+            "type" : "string"
+          },
+          "status" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "timestamp" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "TotalResponse" : {
+        "properties" : {
+          "cantidad" : {
+            "example" : 3,
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "totalConfirmado" : {
+            "example" : 1500.0,
+            "type" : "number"
+          }
+        },
+        "type" : "object"
+      }
+    },
+    "securitySchemes" : {
+      "bearer-jwt" : {
+        "bearerFormat" : "JWT",
+        "scheme" : "bearer",
+        "type" : "http"
+      }
+    }
+  },
+  "info" : {
+    "description" : "Donaciones a la cuenta comun y confirmacion de pagos con Mercado Pago",
+    "title" : "ms-donaciones",
+    "version" : "1.0.0"
+  },
+  "openapi" : "3.1.0",
+  "paths" : {
+    "/api/donaciones" : {
+      "get" : {
+        "operationId" : "listar",
+        "parameters" : [ {
+          "description" : "Numero de pagina (base 0)",
+          "example" : 0,
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "default" : 0,
+            "format" : "int32",
+            "minimum" : 0,
+            "type" : "integer"
+          }
+        }, {
+          "description" : "Cantidad de elementos por pagina (1 a 100)",
+          "example" : 50,
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : 50,
+            "format" : "int32",
+            "maximum" : 100,
+            "minimum" : 1,
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/DonacionResponse"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "Lista de donaciones; el encabezado X-Total-Count informa el total",
+            "headers" : {
+              "X-Total-Count" : {
+                "description" : "Cantidad total de registros",
+                "schema" : {
+                  "type" : "integer"
+                },
+                "style" : "simple"
+              }
+            }
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Parametros de paginacion invalidos"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No autenticado"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rol insuficiente"
+          }
+        },
+        "summary" : "Lista paginada de donaciones propias (ADOPTANTE) o todas (COORDINADOR)",
+        "tags" : [ "Donaciones" ]
+      },
+      "post" : {
+        "description" : "Admite el encabezado opcional Idempotency-Key para reintentos seguros sin cobrar dos veces (ADR-18)",
+        "operationId" : "crear",
+        "parameters" : [ {
+          "description" : "Clave opcional de idempotencia (max. 128 caracteres)",
+          "example" : "550e8400-e29b-41d4-a716-446655440000",
+          "in" : "header",
+          "name" : "Idempotency-Key",
+          "required" : false,
+          "schema" : {
+            "maxLength" : 128,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CrearDonacion"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/DonacionResponse"
+                }
+              }
+            },
+            "description" : "Donacion PENDIENTE con linkPago"
+          },
+          "400" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Monto menor al minimo (D-01) o Idempotency-Key invalido"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No autenticado"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rol insuficiente (requiere ADOPTANTE)"
+          },
+          "409" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Idempotency-Key reutilizada con un monto diferente (ADR-18)"
+          },
+          "503" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Mercado Pago no responde: no se crea la donacion"
+          }
+        },
+        "summary" : "Crea una donacion y devuelve el enlace de pago (ADOPTANTE)",
+        "tags" : [ "Donaciones" ]
+      }
+    },
+    "/api/donaciones/total" : {
+      "get" : {
+        "operationId" : "total",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TotalResponse"
+                }
+              }
+            },
+            "description" : "Totales de donaciones confirmadas"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No autenticado"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Rol insuficiente (requiere COORDINADOR)"
+          }
+        },
+        "summary" : "Total confirmado y cantidad de donaciones confirmadas (COORDINADOR)",
+        "tags" : [ "Donaciones" ]
+      }
+    },
+    "/api/donaciones/{id}" : {
+      "get" : {
+        "operationId" : "obtener",
+        "parameters" : [ {
+          "example" : 1,
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/DonacionResponse"
+                }
+              }
+            },
+            "description" : "Donacion encontrada (si Mercado Pago no responde, devuelve PENDIENTE con verificado=false)"
+          },
+          "401" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No autenticado"
+          },
+          "403" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "Pertenece a otro donante (D-04)"
+          },
+          "404" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description" : "No existe la donacion"
+          }
+        },
+        "summary" : "Consulta una donacion; si esta PENDIENTE verifica el pago en Mercado Pago (D-02)",
+        "tags" : [ "Donaciones" ]
+      }
+    }
+  },
+  "security" : [ {
+    "bearer-jwt" : [ ]
+  } ],
+  "servers" : [ {
+    "description" : "Generated server url",
+    "url" : "http://localhost"
+  } ],
+  "tags" : [ {
+    "description" : "Donaciones a la cuenta comun con Mercado Pago (P5)",
+    "name" : "Donaciones"
+  } ]
+}
