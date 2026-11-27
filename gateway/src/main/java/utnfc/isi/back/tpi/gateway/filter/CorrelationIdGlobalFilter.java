@@ -13,6 +13,7 @@ import reactor.core.publisher.Mono;
 import reactor.util.context.Context;
 
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 /**
  * Genera el X-Correlation-ID si no viene, lo agrega a la peticion que se reenvia al servicio,
@@ -25,12 +26,13 @@ public class CorrelationIdGlobalFilter implements WebFilter, Ordered {
     public static final String HEADER = "X-Correlation-ID";
     public static final String MDC_KEY = "correlationId";
     public static final String ATTR = CorrelationIdGlobalFilter.class.getName() + ".CORRELATION_ID";
+    private static final Pattern PATRON_SEGURO = Pattern.compile("^[A-Za-z0-9._-]{1,100}$");
     private static final Logger log = LoggerFactory.getLogger(CorrelationIdGlobalFilter.class);
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
         String recibido = exchange.getRequest().getHeaders().getFirst(HEADER);
-        String correlationId = (recibido == null || recibido.isBlank() || recibido.length() > 100)
+        String correlationId = (recibido == null || !PATRON_SEGURO.matcher(recibido).matches())
                 ? UUID.randomUUID().toString() : recibido;
         exchange.getAttributes().put(ATTR, correlationId);
         ServerHttpRequest request = exchange.getRequest().mutate()

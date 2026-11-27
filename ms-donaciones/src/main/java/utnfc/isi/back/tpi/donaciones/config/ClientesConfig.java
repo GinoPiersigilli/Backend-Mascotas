@@ -54,9 +54,11 @@ public class ClientesConfig {
                 .waitDuration(retryCfg.waitDuration())
                 .retryExceptions(ServicioNoDisponibleException.class)
                 .build());
-        retryConsulta.getEventPublisher().onRetry(ev ->
-                log.warn("Retry 'mercadoPagoConsulta': intento {} tras {}", ev.getNumberOfRetryAttempts(),
-                        ev.getLastThrowable().getClass().getSimpleName()));
+        retryConsulta.getEventPublisher().onRetry(ev -> {
+            Throwable causa = ev.getLastThrowable();
+            String tipoCausa = causa != null ? causa.getClass().getSimpleName() : "desconocida";
+            log.warn("Retry 'mercadoPagoConsulta': intento {} tras {}", ev.getNumberOfRetryAttempts(), tipoCausa);
+        });
         return new MercadoPagoClient(restClient, mp.usarSandboxInitPoint(), cb, retryConsulta);
     }
 }

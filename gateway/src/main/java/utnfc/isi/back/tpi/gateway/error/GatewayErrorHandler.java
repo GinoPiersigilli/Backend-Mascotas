@@ -70,9 +70,10 @@ public class GatewayErrorHandler implements WebExceptionHandler {
                     return errorWriter.escribir(exchange, status, JsonErrorWriter.descripcion(status),
                             "El servicio que atiende esta ruta no respondio a tiempo");
                 }
+                String reason = rse.getReason();
                 String mensaje = status == HttpStatus.NOT_FOUND
                         ? "No existe el recurso " + exchange.getRequest().getPath().value()
-                        : (rse.getReason() != null && !rse.getReason().isBlank() ? rse.getReason() : status.getReasonPhrase());
+                        : (reason != null && !reason.isBlank() ? reason : status.getReasonPhrase());
                 return errorWriter.escribir(exchange, status, JsonErrorWriter.descripcion(status), mensaje);
             }
             log.error("Error inesperado en el Gateway para {}", exchange.getRequest().getPath(), ex);

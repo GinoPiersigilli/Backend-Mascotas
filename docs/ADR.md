@@ -214,3 +214,14 @@ Formato: contexto → alternativas → decisión → consecuencias → evidencia
   - Se añade el cliente público `adopciones-pkce` (*Authorization Code + PKCE S256*, `directAccessGrantsEnabled: false`) en `infra/keycloak/realm-adopciones.json`, manteniendo `tpi-client` documentado solo para demo local.
   - Se habilitan `management.endpoint.health.probes.enabled: true` y `show-details: never` en los 4 servicios, junto con matrices negativas IDOR/RBAC, `.github/dependabot.yml`, `.github/workflows/security.yml` (CodeQL, gitleaks, Trivy FS/imágenes, dependency-review), `SECURITY.md` y `docs/SEGURIDAD.md`.
 - **Evidencia:** `JwtTokenValidators`, `JwtValidationConfig`, `GatewayJwtValidators`, `JwtTokenValidatorsTest`, `GatewayJwtValidatorTest`, `AdopcionesSecurityMatrixTest`, `DonacionesSecurityMatrixTest`, `AnimalesSecurityMatrixTest`, `SECURITY.md`, `docs/SEGURIDAD.md`, `.github/workflows/security.yml`.
+
+## ADR-23. Compuertas automatizadas de calidad, arquitectura y cobertura (WS-6)
+
+- **Contexto:** las reglas de arquitectura (límites entre servicios, ausencia de Lombok y `@Value`, separación controlador/repositorio/dominio), la higiene estática y el umbral mínimo de cobertura se verificaban por revisión manual en lugar de fallar el build automáticamente.
+- **Decisión:**
+  - **Maven Wrapper (`mvnw` / `mvnw.cmd`, modo `only-script` sin binarios JAR en git):** fija Maven `3.9.16` reproducible en cualquier máquina.
+  - **`maven-enforcer-plugin`:** exige Java `[21,22)`, Maven `>= 3.9.0` y `dependencyConvergence` en todos los módulos.
+  - **Checkstyle (`config/checkstyle/checkstyle.xml`) + SpotBugs (`config/spotbugs/exclude.xml`):** ejecutados en la fase `verify` (manteniendo `package -DskipTests` liviano en Dockerfiles), con exclusiones mínimas y documentadas únicamente para falsos positivos Spring/JPA (`EI_EXPOSE_REP*`, `CT_CONSTRUCTOR_THROW`).
+  - **ArchUnit (`ArquitecturaTest` en los 4 servicios):** bloquea acceso directo de controladores a repositorios, dependencias de `..model..` hacia capas web/servicios/clientes, dependencias cruzadas entre microservicios, uso de Lombok y `@Value`.
+  - **JaCoCo (`jacoco:check` + `coverage-report`):** exige `>= 80%` de cobertura de líneas en paquetes `*.model` y `*.service`, y genera reporte agregado multi-módulo en `coverage-report/target/site/jacoco-aggregate/`.
+- **Evidencia:** `mvnw`, `mvnw.cmd`, `pom.xml`, `config/checkstyle/checkstyle.xml`, `config/spotbugs/exclude.xml`, `coverage-report/pom.xml`, `*/src/test/.../ArquitecturaTest.java`.

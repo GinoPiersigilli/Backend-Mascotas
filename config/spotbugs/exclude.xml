@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter>
+    <!--
+        Falsos positivos conocidos en aplicaciones Spring Boot + JPA + Java records:
+        - EI_EXPOSE_REP / EI_EXPOSE_REP2: inyeccion de beans Spring por constructor y referencias
+          a entidades/listas inmutables en DTOs.
+        - CT_CONSTRUCTOR_THROW: las entidades de dominio validan invariantes en el constructor
+          lanzando excepciones de dominio explicitas (ADR-12).
+    -->
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2,CT_CONSTRUCTOR_THROW"/>
+    </Match>
+</FindBugsFilter>
