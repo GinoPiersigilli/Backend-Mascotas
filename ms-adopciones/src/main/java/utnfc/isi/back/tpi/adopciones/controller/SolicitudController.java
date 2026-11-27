@@ -25,9 +25,12 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 import utnfc.isi.back.tpi.adopciones.dto.EventoResponse;
+import utnfc.isi.back.tpi.adopciones.dto.ReconciliacionResponse;
+import utnfc.isi.back.tpi.adopciones.dto.ResumenSolicitudesResponse;
 import utnfc.isi.back.tpi.adopciones.dto.SolicitudRequests;
 import utnfc.isi.back.tpi.adopciones.dto.SolicitudResponse;
 import utnfc.isi.back.tpi.adopciones.model.EstadoSolicitud;
+import utnfc.isi.back.tpi.adopciones.service.ReconciliadorAdopciones;
 import utnfc.isi.back.tpi.adopciones.service.SolicitudService;
 import utnfc.isi.back.tpi.common.error.ErrorResponse;
 
@@ -44,9 +47,11 @@ import java.util.List;
 public class SolicitudController {
 
     private final SolicitudService service;
+    private final ReconciliadorAdopciones reconciliador;
 
-    public SolicitudController(SolicitudService service) {
+    public SolicitudController(SolicitudService service, ReconciliadorAdopciones reconciliador) {
         this.service = service;
+        this.reconciliador = reconciliador;
     }
 
     @PostMapping
@@ -86,13 +91,37 @@ public class SolicitudController {
     public ResponseEntity<List<SolicitudResponse>> listar(
             JwtAuthenticationToken auth,
             @Parameter(description = "Filtrar por estado", example = "PENDIENTE") @RequestParam(required = false) EstadoSolicitud estado,
+            @Parameter(description = "Filtrar solicitudes EN_ADAPTACION con control final vencido (solo COORDINADOR)", example = "true")
+            @RequestParam(required = false) Boolean controlVencido,
             @Parameter(description = "Numero de pagina (base 0)", example = "0") @RequestParam(defaultValue = "0") @PositiveOrZero int page,
             @Parameter(description = "Cantidad de elementos por pagina (1 a 100)", example = "50") @RequestParam(defaultValue = "50") @Min(1) @Max(100) int size) {
-        Page<SolicitudResponse> pagina = service.listar(UsuarioActual.de(auth), estado,
+        Page<SolicitudResponse> pagina = service.listar(UsuarioActual.de(auth), estado, controlVencido,
                 PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "id")));
         return ResponseEntity.ok()
                 .header("X-Total-Count", String.valueOf(pagina.getTotalElements()))
                 .body(pagina.getContent());
+    }
+
+    @GetMapping("/reportes")
+    @Operation(summary = "Resumen de solicitudes por estado y tiempo promedio de resolucion (COORDINADOR)")
+    @ApiResponse(responseCode = "200", description = "Resumen operativo de solicitudes")
+    @ApiResponse(responseCode = "401", description = "No autenticado",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "403", description = "Rol insuficiente (requiere COORDINADOR)",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = ErrorResponse.class)))
+    public ResumenSolicitudesResponse reportes() {
+        return service.resumen();
+    }
+
+    @PostMapping("/reconciliacion")
+    @Operation(summary = "Ejecuta una corrida de reconciliacion de estados contra ms-animales (COORDINADOR). ADR-06")
+    @ApiResponse(responseCode = "200", description = "Resultado de la reconciliacion con reparaciones y conflictos")
+    @ApiResponse(responseCode = "401", description = "No autenticado",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "403", description = "Rol insuficiente (requiere COORDINADOR)",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = ErrorResponse.class)))
+    public ReconciliacionResponse reconciliar() {
+        return reconciliador.reconciliar();
     }
 
     @GetMapping("/{id}")

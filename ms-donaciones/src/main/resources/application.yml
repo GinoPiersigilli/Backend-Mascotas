@@ -40,6 +40,8 @@ donaciones:
     base-url: ${MP_BASE_URL:https://api.mercadopago.com}
     # Solo la credencial de la cuenta VENDEDORA DE PRUEBA. Nunca se versiona.
     access-token: ${MP_ACCESS_TOKEN:sin-configurar}
+    # Secreto HMAC-SHA256 del panel de Webhooks de Mercado Pago (x-signature). Nunca se versiona.
+    webhook-secret: ${MP_WEBHOOK_SECRET:sin-configurar}
     connect-timeout: ${MP_CONNECT_TIMEOUT:2s}
     read-timeout: ${MP_READ_TIMEOUT:5s}
     usar-sandbox-init-point: ${MP_USAR_SANDBOX_INIT_POINT:false}
@@ -53,6 +55,11 @@ donaciones:
     retry:
       max-attempts: ${MP_RETRY_MAX_ATTEMPTS:3}
       wait-duration: ${MP_RETRY_WAIT:200ms}
+  tareas:
+    habilitadas: ${DONACIONES_TAREAS_HABILITADAS:true}
+    demora-inicial-ms: ${DONACIONES_RECONCILIACION_DEMORA_INICIAL_MS:60000}
+    intervalo-ms: ${DONACIONES_RECONCILIACION_INTERVALO_MS:300000}
+    antiguedad-minima: ${DONACIONES_RECONCILIACION_ANTIGUEDAD_MINIMA:5m}
 
 springdoc:
   api-docs:

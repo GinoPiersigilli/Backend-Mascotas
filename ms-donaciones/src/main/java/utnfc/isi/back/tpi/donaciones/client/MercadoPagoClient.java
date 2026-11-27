@@ -135,6 +135,37 @@ public class MercadoPagoClient {
                 .findFirst();
     }
 
+    /**
+     * GET idempotente: obtiene el detalle autoritativo de un pago puntual (usado al recibir un
+     * webhook de Mercado Pago; nunca se confia solo en el payload entrante).
+     */
+    public Optional<PagoDetalle> obtenerPago(String pagoId) {
+        return ejecutarConCircuito(() -> retryConsulta.executeSupplier(() -> consultarPagoPorId(pagoId)));
+    }
+
+    private Optional<PagoDetalle> consultarPagoPorId(String pagoId) {
+        Pago pago;
+        try {
+            pago = restClient.get()
+                    .uri("/v1/payments/{id}", pagoId)
+                    .retrieve()
+                    .body(Pago.class);
+        } catch (RestClientResponseException e) {
+            if (e.getStatusCode().value() == HttpStatus.NOT_FOUND.value()) {
+                return Optional.empty();
+            }
+            registrarRechazo("consultar pago " + pagoId, e);
+            throw new ServicioNoDisponibleException("Mercado Pago no pudo informar el detalle del pago", e);
+        } catch (RestClientException e) {
+            log.warn("Mercado Pago no responde al consultar el pago {}: {}", pagoId, e.getClass().getSimpleName());
+            throw new ServicioNoDisponibleException("Mercado Pago no responde", e);
+        }
+        if (pago == null || pago.id() == null) {
+            throw new ServicioNoDisponibleException("Mercado Pago devolvio una respuesta inesperada al consultar el pago");
+        }
+        return Optional.of(new PagoDetalle(String.valueOf(pago.id()), pago.status(), pago.externalReference()));
+    }
+
     private <T> T ejecutarConCircuito(Supplier<T> llamada) {
         try {
             return circuitBreaker.executeSupplier(llamada);
@@ -159,6 +190,13 @@ public class MercadoPagoClient {
     public record Cobro(String preferenciaId, String linkPago) {
     }
 
+    /** Detalle minimo de un pago consultado por id tras un webhook de Mercado Pago. */
+    public record PagoDetalle(String id, String status, String externalReference) {
+        public boolean aprobado() {
+            return APROBADO.equals(status);
+        }
+    }
+
     @JsonIgnoreProperties(ignoreUnknown = true)
     record Preferencia(String id,
                        @JsonProperty("init_point") String initPoint,
@@ -170,6 +208,6 @@ public class MercadoPagoClient {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record Pago(Long id, String status) {
+    record Pago(Long id, String status, @JsonProperty("external_reference") String externalReference) {
     }
 }

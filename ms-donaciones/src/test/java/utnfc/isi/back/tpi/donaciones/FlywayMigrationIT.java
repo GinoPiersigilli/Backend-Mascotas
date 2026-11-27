@@ -7,6 +7,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.TestPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -26,6 +27,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @SpringBootTest
 @Testcontainers
 @Tag("integration")
+@TestPropertySource(properties = "donaciones.tareas.habilitadas=false")
 class FlywayMigrationIT {
 
     @Container
@@ -41,9 +43,14 @@ class FlywayMigrationIT {
     @Test
     void migracionInicialValidaEntidadYRestriccionesUnicas() {
         Integer migraciones = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM donaciones.flyway_schema_history WHERE version IN ('1', '2') AND success = true",
+                "SELECT COUNT(*) FROM donaciones.flyway_schema_history WHERE version IN ('1', '2', '3') AND success = true",
                 Integer.class);
-        assertThat(migraciones).isEqualTo(2);
+        assertThat(migraciones).isEqualTo(3);
+
+        Integer tablaShedlock = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'donaciones' AND table_name = 'shedlock'",
+                Integer.class);
+        assertThat(tablaShedlock).isEqualTo(1);
 
         LocalDateTime ahora = LocalDateTime.of(2026, 5, 1, 10, 0);
         Donacion primera = new Donacion(

@@ -39,6 +39,7 @@ services:
     environment:
       MP_BASE_URL: http://wiremock:8080
       MP_ACCESS_TOKEN: demo-wiremock-token
+      MP_WEBHOOK_SECRET: demo-webhook-secret
       MP_USAR_SANDBOX_INIT_POINT: "false"
     depends_on:
       postgres:

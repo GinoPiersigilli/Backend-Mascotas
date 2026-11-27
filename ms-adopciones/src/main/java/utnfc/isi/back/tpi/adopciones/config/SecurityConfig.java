@@ -40,7 +40,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/solicitudes").hasRole(ADOPTANTE)
                         .requestMatchers(HttpMethod.POST, "/api/solicitudes/*/cancelar", "/api/solicitudes/*/devolucion")
                         .hasRole(ADOPTANTE)
-                        // Decisiones del Coordinador
+                        // Decisiones y operaciones exclusivas del Coordinador
+                        .requestMatchers(HttpMethod.GET, "/api/solicitudes/reportes").hasRole(COORDINADOR)
+                        .requestMatchers(HttpMethod.POST, "/api/solicitudes/reconciliacion").hasRole(COORDINADOR)
                         .requestMatchers(HttpMethod.POST, "/api/solicitudes/*/aprobar", "/api/solicitudes/*/rechazar",
                                 "/api/solicitudes/*/confirmar-entrega", "/api/solicitudes/*/cancelar-entrega",
                                 "/api/solicitudes/*/control-final")

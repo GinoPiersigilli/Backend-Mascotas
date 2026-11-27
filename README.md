@@ -232,14 +232,12 @@ Los reportes de cobertura de **JaCoCo** se generan localmente en `<módulo>/targ
 
 ### Limitaciones actuales
 - **Cálculo de distancia:** se calcula en línea recta (Haversine) y no por distancia vial real.
-- **Sin webhooks de Mercado Pago:** al ejecutarse en entorno local sin HTTPS público, el estado de una donación se sincroniza por consulta (*polling* bajo demanda) en lugar de notificaciones *push*.
-- **Consistencia entre servicios:** no hay patrón Outbox ni reconciliación automática; si `ms-animales` confirma una reserva y el *commit* local de `ms-adopciones` falla inmediatamente después, requiere intervención manual ([ADR-06](docs/ADR.md#adr-06-consistencia-entre-servicios-sin-transacción-distribuida)).
+- **Webhook de Mercado Pago en entorno local:** el endpoint firmado (`POST /api/donaciones/webhooks/mercadopago`) requiere un túnel HTTPS (ej. ngrok o Cloudflare Tunnel) para recibir callbacks reales desde Mercado Pago; sin túnel, las donaciones pendientes se confirman automáticamente mediante la reconciliación programada o al consultarlas ([ADR-11](docs/ADR.md#adr-11-mercado-pago-checkout-pro-con-webhook-firmado-reconciliación-periódica-y-verificación-bajo-demanda)).
+- **Consistencia eventual acotada:** no se utiliza un broker externo ni Outbox transaccional; las desincronizaciones residuales del caso borde de [ADR-06](docs/ADR.md#adr-06-consistencia-entre-servicios-sin-transacción-distribuida) se reparan con la reconciliación periódica o manual (`POST /api/solicitudes/reconciliacion`), reportando conflictos ambiguos para intervención del Coordinador.
 - **Configuración de Keycloak local:** se utiliza `start-dev` (HTTP sin TLS) y *Resource Owner Password Grant* en `tpi-client` para facilitar pruebas locales y desde Postman.
-- **Seguimiento de vencimientos:** la tarea programada automatiza R-09 (entrega vencida); los controles finales vencidos (R-11) se consultan filtrando solicitudes `EN_ADAPTACION` por `fechaControl`.
 
 ### Próximos pasos
-- Implementar un **Outbox transaccional** o una tarea de reconciliación periódica para cubrir el caso residual de [ADR-06](docs/ADR.md#adr-06-consistencia-entre-servicios-sin-transacción-distribuida).
-- Añadir un endpoint de **webhook de Mercado Pago** con verificación de firma sobre HTTPS.
+- Evolucionar los eventos de dominio en proceso (`ApplicationEventPublisher`) a un **Outbox transaccional** + broker si en el futuro aparecen consumidores externos a `ms-adopciones` ([ADR-17](docs/ADR.md#adr-17-estrategia-para-la-inconsistencia-residual-de-adr-06)).
 - Migrar la autenticación de usuarios a **Authorization Code + PKCE** cuando se integre un frontend, deshabilitando *password grant* y usando Keycloak en modo producción detrás de TLS.
 - Sumar trazas distribuidas (**OpenTelemetry**) sobre el `X-Correlation-ID` existente y conectar un stack de scraping/dashboards (**Prometheus + Grafana**) sobre los endpoints `/actuator/prometheus` ya expuestos.
 

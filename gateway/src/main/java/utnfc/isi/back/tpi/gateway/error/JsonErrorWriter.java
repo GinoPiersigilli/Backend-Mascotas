@@ -66,6 +66,7 @@ public class JsonErrorWriter {
             case NOT_FOUND -> "No encontrado";
             case METHOD_NOT_ALLOWED -> "Metodo no permitido";
             case CONFLICT -> "Conflicto";
+            case PAYLOAD_TOO_LARGE -> "Cuerpo demasiado grande";
             case UNSUPPORTED_MEDIA_TYPE -> "Tipo de contenido no soportado";
             case SERVICE_UNAVAILABLE -> "Servicio no disponible";
             case GATEWAY_TIMEOUT -> "Tiempo de espera agotado";

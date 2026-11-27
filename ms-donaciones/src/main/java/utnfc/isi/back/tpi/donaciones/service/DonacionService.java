@@ -33,7 +33,8 @@ import java.util.UUID;
 
 /**
  * Proceso P5: recepcion de donaciones (reglas D-01 a D-04).
- * Las llamadas a Mercado Pago se hacen fuera de las transacciones de base de datos.
+ * Las llamadas a Mercado Pago se hacen fuera de las transacciones de base de
+ * datos.
  */
 @Service
 public class DonacionService {
@@ -48,7 +49,7 @@ public class DonacionService {
     private final Clock clock;
 
     public DonacionService(DonacionRepository repository, MercadoPagoClient mercadoPago, DonacionesProperties props,
-                           PlatformTransactionManager transactionManager, Clock clock) {
+            PlatformTransactionManager transactionManager, Clock clock) {
         this.repository = repository;
         this.mercadoPago = mercadoPago;
         this.props = props;
@@ -59,7 +60,8 @@ public class DonacionService {
     }
 
     /**
-     * D-01 y creacion del cobro. Si Mercado Pago falla, la excepcion (503) se propaga ANTES de
+     * D-01 y creacion del cobro. Si Mercado Pago falla, la excepcion (503) se
+     * propaga ANTES de
      * guardar: no queda ninguna donacion registrada sin enlace de pago.
      */
     public DonacionResponse crear(String donanteId, BigDecimal monto) {
@@ -67,8 +69,10 @@ public class DonacionService {
     }
 
     /**
-     * Crea una donacion con soporte opcional de {@code Idempotency-Key} acotada por donante (ADR-18):
-     * misma clave + mismo monto devuelve la donacion existente sin cobrar dos veces; misma clave +
+     * Crea una donacion con soporte opcional de {@code Idempotency-Key} acotada por
+     * donante (ADR-18):
+     * misma clave + mismo monto devuelve la donacion existente sin cobrar dos
+     * veces; misma clave +
      * monto distinto responde 409 Conflict.
      */
     public DonacionResponse crear(String donanteId, BigDecimal monto, String idempotencyKey) {
@@ -89,7 +93,8 @@ public class DonacionService {
         Donacion donacion = new Donacion(referencia, donanteId, monto, cobro.preferenciaId(), cobro.linkPago(),
                 LocalDateTime.now(clock), clave, hash);
         try {
-            DonacionResponse respuesta = tx.execute(st -> DonacionResponse.desde(repository.saveAndFlush(donacion), true));
+            DonacionResponse respuesta = tx
+                    .execute(st -> DonacionResponse.desde(repository.saveAndFlush(donacion), true));
             log.info("Donacion {} creada PENDIENTE por {} ARS", respuesta.id(), monto);
             return respuesta;
         } catch (DataIntegrityViolationException e) {
@@ -122,7 +127,10 @@ public class DonacionService {
         }
     }
 
-    /** D-04: el donante ve las suyas; el Coordinador, todas. No consulta al proveedor. */
+    /**
+     * D-04: el donante ve las suyas; el Coordinador, todas. No consulta al
+     * proveedor.
+     */
     public List<DonacionResponse> listar(String usuario, boolean coordinador) {
         return txReadOnly.execute(st -> (coordinador ? repository.findAllByOrderByIdDesc()
                 : repository.findByDonanteIdOrderByIdDesc(usuario))
@@ -139,8 +147,10 @@ public class DonacionService {
     }
 
     /**
-     * D-04 y D-02: si la donacion esta PENDIENTE, pregunta a Mercado Pago si hay un pago aprobado
-     * con su referencia. Si el proveedor no responde, devuelve la donacion PENDIENTE con
+     * D-04 y D-02: si la donacion esta PENDIENTE, pregunta a Mercado Pago si hay un
+     * pago aprobado
+     * con su referencia. Si el proveedor no responde, devuelve la donacion
+     * PENDIENTE con
      * verificado = false (se puede volver a consultar mas tarde).
      */
     public DonacionResponse obtener(String usuario, boolean coordinador, Long id) {
@@ -165,7 +175,61 @@ public class DonacionService {
         return confirmar(id, pagoAprobado.get());
     }
 
-    /** D-03: CONFIRMADA es final y un pago (pago_id UNIQUE) no puede confirmar dos donaciones. */
+    /** F2: ids de donaciones PENDIENTE con antiguedad mayor a la configurada, para reconciliar. */
+    public List<Long> buscarPendientesParaReconciliar() {
+        LocalDateTime limite = LocalDateTime.now(clock).minus(props.tareas().antiguedadMinima());
+        return txReadOnly.execute(st -> repository
+                .findByEstadoAndFechaCreacionBeforeOrderByIdAsc(EstadoDonacion.PENDIENTE, limite)
+                .stream().map(Donacion::getId).toList());
+    }
+
+    /**
+     * F2: reconcilia una donacion PENDIENTE consultando Mercado Pago fuera de la transaccion.
+     * Devuelve true solo si efectivamente paso a CONFIRMADA en esta corrida.
+     */
+    public boolean reconciliarPendiente(Long id) {
+        Optional<Donacion> opt = txReadOnly.execute(st -> repository.findById(id));
+        if (opt.isEmpty() || opt.get().getEstado() != EstadoDonacion.PENDIENTE) {
+            return false;
+        }
+        Optional<String> pagoAprobado = mercadoPago.buscarPagoAprobado(opt.get().getReferencia());
+        if (pagoAprobado.isEmpty()) {
+            return false;
+        }
+        return confirmarSiPendiente(id, pagoAprobado.get());
+    }
+
+    /**
+     * F2 (webhook): consulta el detalle autoritativo del pago en Mercado Pago y, si esta aprobado
+     * y corresponde a una donacion PENDIENTE por external_reference, la confirma idempotentemente.
+     * Si Mercado Pago no responde propaga ServicioNoDisponibleException (503) para que reintente.
+     */
+    public boolean procesarNotificacionPago(String pagoId) {
+        Optional<MercadoPagoClient.PagoDetalle> detalleOpt = mercadoPago.obtenerPago(pagoId);
+        if (detalleOpt.isEmpty()) {
+            log.info("Webhook Mercado Pago: pago {} no encontrado en el proveedor", pagoId);
+            return false;
+        }
+        MercadoPagoClient.PagoDetalle detalle = detalleOpt.get();
+        if (!detalle.aprobado() || detalle.externalReference() == null || detalle.externalReference().isBlank()) {
+            log.info("Webhook Mercado Pago: pago {} en estado {} sin confirmacion aplicable",
+                    pagoId, detalle.status());
+            return false;
+        }
+        Optional<Donacion> donacionOpt = txReadOnly.execute(
+                st -> repository.findByReferencia(detalle.externalReference().trim()));
+        if (donacionOpt.isEmpty()) {
+            log.warn("Webhook Mercado Pago: pago {} aprobado con referencia desconocida {}",
+                    pagoId, detalle.externalReference());
+            return false;
+        }
+        return confirmarSiPendiente(donacionOpt.get().getId(), detalle.id());
+    }
+
+    /**
+     * D-03: CONFIRMADA es final y un pago (pago_id UNIQUE) no puede confirmar dos
+     * donaciones.
+     */
     private DonacionResponse confirmar(Long id, String pagoId) {
         try {
             return tx.execute(st -> {
@@ -180,6 +244,25 @@ public class DonacionService {
         } catch (DataIntegrityViolationException e) {
             log.error("El pago {} ya estaba asociado a otra donacion; la donacion {} sigue PENDIENTE", pagoId, id);
             return tx.execute(st -> DonacionResponse.desde(buscar(id), false));
+        }
+    }
+
+    private boolean confirmarSiPendiente(Long id, String pagoId) {
+        try {
+            Boolean confirmada = tx.execute(st -> {
+                Donacion d = buscar(id);
+                if (d.getEstado() != EstadoDonacion.PENDIENTE) {
+                    return false;
+                }
+                d.confirmar(pagoId, LocalDateTime.now(clock));
+                repository.saveAndFlush(d);
+                log.info("Donacion {} CONFIRMADA con el pago {}", id, pagoId);
+                return true;
+            });
+            return Boolean.TRUE.equals(confirmada);
+        } catch (DataIntegrityViolationException e) {
+            log.error("El pago {} ya estaba asociado a otra donacion; la donacion {} sigue PENDIENTE", pagoId, id);
+            return false;
         }
     }
 

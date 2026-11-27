@@ -47,7 +47,8 @@ import java.util.List;
 }, indexes = {
         @Index(name = "idx_solicitud_adoptante_id", columnList = "adoptante_id"),
         @Index(name = "idx_solicitud_animal_estado", columnList = "animal_id, estado"),
-        @Index(name = "idx_solicitud_estado_fecha_aprobacion", columnList = "estado, fecha_aprobacion")
+        @Index(name = "idx_solicitud_estado_fecha_aprobacion", columnList = "estado, fecha_aprobacion"),
+        @Index(name = "idx_solicitud_estado_fecha_control", columnList = "estado, fecha_control")
 })
 public class Solicitud {
 
@@ -106,6 +107,10 @@ public class Solicitud {
 
     @Column(name = "fecha_control")
     private LocalDateTime fechaControl;
+
+    /** F1: marca para evitar alertas duplicadas cuando vence el control final (R-11). */
+    @Column(name = "control_vencido_alertado", nullable = false)
+    private boolean controlVencidoAlertado;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "resultado_control", length = 20)
@@ -235,6 +240,25 @@ public class Solicitud {
         cambiarEstado(EstadoSolicitud.CANCELADA, ahora, ACTOR_SISTEMA, motivoCierre);
     }
 
+    /** R-11: indica si ya paso la fecha programada para el control final estando EN_ADAPTACION. */
+    public boolean controlFinalVencido(LocalDateTime ahora) {
+        return estado == EstadoSolicitud.EN_ADAPTACION && fechaControl != null && ahora.isAfter(fechaControl);
+    }
+
+    /**
+     * F1: registra una unica alerta en el historial cuando vence el control final sin cambiar
+     * el estado de la solicitud. Devuelve false si no corresponde o ya fue alertada.
+     */
+    public boolean registrarAlertaControlVencido(LocalDateTime ahora) {
+        if (!controlFinalVencido(ahora) || controlVencidoAlertado) {
+            return false;
+        }
+        this.controlVencidoAlertado = true;
+        this.eventos.add(new EventoSolicitud(this, ahora, estado, estado, ACTOR_SISTEMA,
+                "Alerta: control final vencido desde " + fechaControl + " (R-11)"));
+        return true;
+    }
+
     /** R-11 (conforme) y R-12 (desfavorable). Solo desde la fecha de control. */
     public void registrarControl(ResultadoControl resultado, String observacionesControl, LocalDateTime ahora, String actor) {
         if (resultado == null) {
@@ -354,6 +378,10 @@ public class Solicitud {
 
     public LocalDateTime getFechaControl() {
         return fechaControl;
+    }
+
+    public boolean isControlVencidoAlertado() {
+        return controlVencidoAlertado;
     }
 
     public ResultadoControl getResultadoControl() {

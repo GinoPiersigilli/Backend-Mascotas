@@ -49,8 +49,8 @@ Formato: contexto → alternativas → decisión → consecuencias → evidencia
 - **Contexto:** aprobar cambia dos bases (solicitud y animal).
 - **Alternativas:** 2PC/XA (no disponible en REST), saga con eventos y compensaciones, orden local-primero con *rollback*.
 - **Decisión:** dentro de una transacción local se aplica el cambio de la solicitud y se hace `flush` (aparecen conflictos de versión o UNIQUE **antes** de tocar Animales); luego se llama a Animales; si falla, la excepción revierte el cambio local. Las llamadas a Georef y la consulta inicial a Animales se hacen fuera de la transacción.
-- **Consecuencias:** nunca queda una solicitud APROBADA con el animal sin reservar. Caso residual: Animales confirma y el *commit* local falla (por ejemplo, caída de la base en ese instante); quedaría el animal RESERVADO sin solicitud APROBADA. Se registra en logs y se corrige manualmente; una mejora sería una tarea de reconciliación.
-- **Evidencia:** `SolicitudService.conCambioDeAnimal`, pruebas `r07SiAnimalesRechazaLaReservaNoSeAprueba` y `siAnimalesNoRespondeAlAprobar...`.
+- **Consecuencias:** nunca queda una solicitud APROBADA con el animal sin reservar. Caso residual: Animales confirma y el *commit* local falla (por ejemplo, caída de la base en ese instante); quedaría el animal RESERVADO sin solicitud APROBADA. En **WS-4 (ADR-21)** se añadió `ReconciliadorAdopciones` (tarea programada protegida con ShedLock + endpoint `POST /api/solicitudes/reconciliacion` para `COORDINADOR`), que detecta y repara de forma idempotente estas desincronizaciones y reporta conflictos ambiguos para revisión manual.
+- **Evidencia:** `SolicitudService.conCambioDeAnimal`, `ReconciliadorAdopciones`, `TareaReconciliacionAdopciones`, pruebas `r07SiAnimalesRechazaLaReservaNoSeAprueba`, `siAnimalesNoRespondeAlAprobar...` y `AdopcionesFuncionalidadesTest`.
 
 ## ADR-07. Concurrencia: columnas de bloqueo con UNIQUE + bloqueo optimista
 
@@ -80,11 +80,14 @@ Formato: contexto → alternativas → decisión → consecuencias → evidencia
 - **Decisión:** Georef `/direcciones` + Haversine propio; falla externa → `distanciaNoVerificada` (no bloquea: la decisión es humana).
 - **Evidencia:** `GeorefClient` (formato verificado contra la API real), `CalculadoraDistancia`, `EvaluadorSolicitud`.
 
-## ADR-11. Mercado Pago sin webhooks
+## ADR-11. Mercado Pago: Checkout Pro con webhook firmado, reconciliación periódica y verificación bajo demanda
 
-- **Decisión:** Checkout Pro (preferencia + `init_point`); la confirmación se obtiene consultando `/v1/payments/search` por `external_reference` (UUID propio) al consultar la donación.
-- **Consecuencias:** sin endpoint público para notificaciones (no hay HTTPS público en entorno local); una donación puede quedar PENDIENTE hasta que alguien la consulte.
-- **Evidencia:** `MercadoPagoClient`, `DonacionService.obtener`.
+- **Decisión:** Checkout Pro (preferencia + `init_point`) con tres vías complementarias e idempotentes sobre `uk_donacion_pago_id`:
+  1. **Webhook público firmado** (`POST /api/donaciones/webhooks/mercadopago`, incorporado en WS-4 / ADR-21): valida la cabecera `x-signature` (HMAC-SHA256 con `MP_WEBHOOK_SECRET`) y consulta el detalle autoritativo `GET /v1/payments/{id}` antes de confirmar.
+  2. **Reconciliación programada** (`TareaReconciliacionDonaciones`, protegida con ShedLock sobre `donaciones.shedlock`): revisa donaciones `PENDIENTE` antiguas consultando `/v1/payments/search?external_reference=...`.
+  3. **Verificación bajo demanda** (`GET /api/donaciones/{id}`): mantiene compatibilidad cuando se ejecuta en local sin túnel HTTPS.
+- **Consecuencias:** en entornos sin túnel HTTPS público las donaciones pendientes siguen confirmándose automáticamente vía reconciliación o al consultarlas; con túnel/HTTPS público el webhook confirma el pago en tiempo real sin confiar en el cuerpo entrante.
+- **Evidencia:** `MercadoPagoClient`, `DonacionService`, `VerificadorFirmaMercadoPago`, `MercadoPagoWebhookController`, `TareaReconciliacionDonaciones`.
 
 ## ADR-12. Sin Lombok; records para DTO
 
@@ -191,3 +194,14 @@ Formato: contexto → alternativas → decisión → consecuencias → evidencia
   3. **Transiciones internas idempotentes en `ms-animales`:** `CambioEstadoRequest` incorpora `solicitudId` opcional y `animal` agrega `solicitud_activa_id` (`V2__solicitud_id_idempotencia.sql`). Repetir una transición sobre un animal que ya está en el estado destino para la **misma** `solicitudId` (o ya `DISPONIBLE` sin solicitud activa) responde `200 OK` sin efecto ni incremento de `@Version`; otra solicitud sobre un animal con adopción en curso recibe `409`.
   4. **ShedLock sobre JDBC (`adopciones.shedlock`, `V2__shedlock.sql`):** `@SchedulerLock` en `TareaVencimientos.vencerEntregas()` garantiza ejecución única entre réplicas sin sumar Redis ni broker, manteniendo una transacción por solicitud y exponiendo los contadores `adopciones.vencimientos.procesados` y `adopciones.vencimientos.fallidos`.
 - **Evidencia:** `V2__solicitud_id_idempotencia.sql`, `Animal.cambiarEstadoPorProceso`, `AnimalIdempotenciaTest`, `V2__shedlock.sql`, `ShedLockConfig`, `TareaVencimientos`, `TareaVencimientosTest`, `ClientesResilienciaTest`, `MercadoPagoResilienciaTest`.
+
+## ADR-21. Cierre de brechas operativas y hardening del Gateway (WS-4)
+
+- **Contexto:** tras la auditoría quedaban cuatro brechas operativas declaradas (controles finales vencidos sin alerta, confirmaciones de Mercado Pago solo bajo demanda, caso residual de ADR-06 sin reconciliación automática, ausencia de métricas/reportes de gestión) y hardening pendiente en el borde del Gateway (CORS, cabeceras de seguridad, límite de tamaño de cuerpo).
+- **Decisión:**
+  - **F1 (Control final vencido):** columna booleana `control_vencido_alertado` + índice `(estado, fecha_control)` (`V3__control_vencido_alertado.sql`), tarea `TareaControlesVencidos` con `@SchedulerLock` que registra una única alerta en el historial sin mutar el estado `EN_ADAPTACION`, más filtro `?controlVencido=true` exclusivo para `COORDINADOR`.
+  - **F2 (Donaciones — webhook + reconciliación):** `POST /api/donaciones/webhooks/mercadopago` público en Gateway y `ms-donaciones` autenticado por HMAC-SHA256 (`x-signature` en tiempo constante) con verificación autoritativa `GET /v1/payments/{id}`, complementado por `TareaReconciliacionDonaciones` con ShedLock (`V3__shedlock.sql` en esquema `donaciones`).
+  - **F3 (Reconciliador ADR-06):** `ReconciliadorAdopciones` + `TareaReconciliacionAdopciones` + `POST /api/solicitudes/reconciliacion` (`COORDINADOR`). Auto-repara únicamente transiciones seguras usando la idempotencia con `solicitudId` de WS-3 y reporta conflictos ambiguos sin pisar estados.
+  - **F4 y F5 (Reportes y eventos de dominio):** `GET /api/solicitudes/reportes` (`COORDINADOR`) con agregaciones JPQL por estado y tiempo promedio de resolución; eventos en proceso (`ApplicationEventPublisher`: `SolicitudAprobadaEvent`, `EntregaConfirmadaEvent`, `AdopcionConfirmadaEvent`) publicados **tras el commit** y registrados sin PII por `EventosAdopcionListener`.
+  - **F6 (Hardening del Gateway):** `GatewayHardeningProperties` tipado y validado (`GATEWAY_CORS_ALLOWED_ORIGINS` vacío/cerrado por defecto, `GATEWAY_MAX_BODY_BYTES=1048576`), cabeceras `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Cache-Control` y `Content-Security-Policy`, y `MaxBodySizeFilter` devolviendo `413` en formato `ErrorResponse`.
+- **Evidencia:** `V3__control_vencido_alertado.sql`, `TareaControlesVencidos`, `ReconciliadorAdopciones`, `EventosAdopcionListener`, `V3__shedlock.sql` (`ms-donaciones`), `VerificadorFirmaMercadoPago`, `MercadoPagoWebhookController`, `TareaReconciliacionDonaciones`, `GatewayHardeningProperties`, `MaxBodySizeFilter`, `AdopcionesFuncionalidadesTest`, `DonacionesReconciliacionYWebhookTest`, `GatewayHardeningTest`.

@@ -57,6 +57,17 @@
             <groupId>io.github.resilience4j</groupId>
             <artifactId>resilience4j-retry</artifactId>
         </dependency>
+        <!-- Bloqueo distribuido JDBC para tareas @Scheduled en multiples replicas (WS-4 / F2) -->
+        <dependency>
+            <groupId>net.javacrumbs.shedlock</groupId>
+            <artifactId>shedlock-spring</artifactId>
+            <version>${shedlock.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>net.javacrumbs.shedlock</groupId>
+            <artifactId>shedlock-provider-jdbc-template</artifactId>
+            <version>${shedlock.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
