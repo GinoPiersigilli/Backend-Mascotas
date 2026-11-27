@@ -39,6 +39,11 @@ spring:
                 - Path=/api/donaciones/**
 
 management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
   endpoints:
     web:
       exposure:
@@ -48,6 +53,9 @@ gateway:
   seguridad:
     cors-allowed-origins: ${GATEWAY_CORS_ALLOWED_ORIGINS:}
     max-body-bytes: ${GATEWAY_MAX_BODY_BYTES:1048576}
+    jwt-clock-skew: ${JWT_CLOCK_SKEW:30s}
+    jwt-allowed-clients: ${GATEWAY_JWT_ALLOWED_CLIENTS:tpi-client,adopciones-pkce}
+    jwt-required-audience: ${JWT_REQUIRED_AUDIENCE:}
 
 logging:
   pattern:

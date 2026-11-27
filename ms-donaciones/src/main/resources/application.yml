@@ -67,7 +67,18 @@ springdoc:
   swagger-ui:
     enabled: ${SWAGGER_ENABLED:true}
 
+seguridad:
+  jwt:
+    clock-skew: ${JWT_CLOCK_SKEW:30s}
+    allowed-clients: ${JWT_ALLOWED_CLIENTS:tpi-client,adopciones-pkce,adopciones-service}
+    required-audience: ${JWT_REQUIRED_AUDIENCE:}
+
 management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
   endpoints:
     web:
       exposure:

@@ -1,11 +1,16 @@
 package utnfc.isi.back.tpi.gateway.security;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.security.oauth2.resource.OAuth2ResourceServerProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
+import org.springframework.security.oauth2.jwt.NimbusReactiveJwtDecoder;
+import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.ReactiveJwtAuthenticationConverterAdapter;
 import org.springframework.security.web.server.SecurityWebFilterChain;
@@ -88,5 +93,18 @@ public class SecurityConfig {
             source.registerCorsConfiguration("/api/**", config);
         }
         return source;
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(ReactiveJwtDecoder.class)
+    @ConditionalOnProperty(prefix = "spring.security.oauth2.resourceserver.jwt", name = {"jwk-set-uri", "issuer-uri"})
+    ReactiveJwtDecoder reactiveJwtDecoder(OAuth2ResourceServerProperties oauthProps,
+                                          GatewayHardeningProperties hardeningProps) {
+        OAuth2ResourceServerProperties.Jwt cfg = oauthProps.getJwt();
+        NimbusReactiveJwtDecoder decoder = NimbusReactiveJwtDecoder.withJwkSetUri(cfg.getJwkSetUri()).build();
+        decoder.setJwtValidator(GatewayJwtValidators.crear(
+                cfg.getIssuerUri(), hardeningProps.jwtClockSkew(),
+                hardeningProps.jwtAllowedClients(), hardeningProps.jwtRequiredAudience()));
+        return decoder;
     }
 }

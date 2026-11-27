@@ -36,6 +36,8 @@
         <springdoc.version>2.8.17</springdoc.version>
         <jacoco.version>0.8.13</jacoco.version>
         <shedlock.version>6.3.0</shedlock.version>
+        <!-- Parche de seguridad pgjdbc (CVE-2026-54291, detectado por Trivy en WS-5) -->
+        <postgresql.version>42.7.12</postgresql.version>
         <argLine></argLine>
     </properties>
 
