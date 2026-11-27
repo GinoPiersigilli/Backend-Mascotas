@@ -1,45 +1,46 @@
-# Adopción responsable de animales — Backend de microservicios
+# Adopción Responsable — Backend de Microservicios
+
+Sistema distribuido para coordinar el ciclo completo de adopción de animales y el registro de donaciones de un refugio, construido con Java 21, Spring Boot 3.5 y Spring Cloud.
 
 [![CI](https://github.com/GinoPiersigilli/Backend-Mascotas/actions/workflows/ci.yml/badge.svg)](https://github.com/GinoPiersigilli/Backend-Mascotas/actions/workflows/ci.yml)
+[![Java 21](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk&logoColor=white)](https://adoptium.net/)
+[![Spring Boot 3.5](https://img.shields.io/badge/Spring%20Boot-3.5.16-6DB33F?logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Backend de microservicios (Java 21, Spring Boot 3.5) que ordena el ciclo completo de una adopción
-—desde que un animal está disponible hasta que la adopción se confirma tras un período de
-adaptación— y registra las donaciones a la cuenta común de la organización.
+---
 
-> Documentación complementaria en [`docs/`](docs): análisis y alcance ([ANALISIS.md](docs/ANALISIS.md)),
-> contratos ([CONTRATOS.md](docs/CONTRATOS.md)), API ([API.md](docs/API.md)), decisiones
-> ([ADR.md](docs/ADR.md)), patrones ([PATRONES.md](docs/PATRONES.md)) y auditoría
-> ([AUDITORIA.md](docs/AUDITORIA.md)).
+## 1. Qué es y qué problema resuelve
 
-## 1. Problema que resuelve
+Muchos refugios de animales gestionan adopciones a través de chats y planillas sueltas: no existe una fuente única de verdad sobre qué animales están disponibles, varias personas se postulan por el mismo animal al mismo tiempo, las aprobaciones se toman sin validar compatibilidad del hogar ni distancia geográfica, no hay seguimiento formal durante el período de adaptación y las donaciones quedan desvinculadas de su estado real de cobro.
 
-Un refugio coordina adopciones por mensajería y planillas: no hay una visión única de qué animales
-están disponibles, varias personas piden el mismo animal, se aprueban adopciones sin verificar la
-compatibilidad del hogar ni la distancia, nadie controla si la adopción funcionó y las donaciones no
-quedan registradas. Este backend aplica reglas explícitas en cada paso y deja trazabilidad de cada
-decisión.
+Este backend resuelve ese flujo aplicando reglas de negocio explícitas en cada transición de estado y registrando un historial auditable de cada decisión. Cubre cinco procesos: gestión del catálogo y ciclo de vida del animal (**P1**), presentación y evaluación de solicitudes con compatibilidad y distancia (**P2**), entrega dentro de un plazo con vencimiento automático (**P3**), seguimiento de adaptación y posibles devoluciones (**P4**), y cobro/confirmación de donaciones (**P5**).
 
-**Actores:** Adoptante (también donante), Coordinador (personal del refugio). **Sistemas externos:**
-Keycloak (identidad), API Georef (coordenadas del domicilio) y Mercado Pago (cobro de donaciones).
+Interactúa con tres sistemas externos reales: **Keycloak** para autenticación y autorización OIDC/JWT, la **API pública Georef** (Argentina) para geolocalizar domicilios y calcular distancia al refugio, y **Mercado Pago** (Checkout Pro) para gestionar donaciones.
 
-## 2. Alcance del MVP
+> **Documentación técnica en [`docs/`](docs):** [análisis de dominio](docs/ANALISIS.md), [contratos de integración](docs/CONTRATOS.md), [referencia de API](docs/API.md), [decisiones arquitectónicas (ADR)](docs/ADR.md) y [patrones aplicados](docs/PATRONES.md).
 
-| Proceso | Qué hace | Reglas |
-|---|---|---|
-| P1 Gestión de animales | Alta, modificación, disponibilidad y estado del animal | R-13 |
-| P2 Presentación y evaluación | El adoptante solicita; el sistema verifica y evalúa; el Coordinador decide | R-01 a R-08 |
-| P3 Entrega | Confirmación o cancelación de la entrega dentro del plazo | R-09, R-10 |
-| P4 Adaptación y seguimiento | Control final (conforme o desfavorable) o devolución | R-11, R-12 |
-| P5 Donaciones | Cobro con Mercado Pago y confirmación consultando el pago | D-01 a D-04 |
+---
 
-**Proceso central (el que se demuestra de punta a punta):** perfil → solicitud evaluada
-(Animales + Georef) → aprobación (Animales reserva) → entrega → control final → animal ADOPTADO,
-con historial de cada decisión.
+## 2. Demo y Quickstart
+
+<!-- TODO: agregar GIF o capturas del flujo completo de adopción (Postman / Swagger UI / logs con X-Correlation-ID) -->
+
+Levantar el stack completo (7 contenedores: Gateway, 3 microservicios, Keycloak y 2 instancias PostgreSQL) y ejecutar la prueba de humo de punta a punta:
+
+```bash
+cp .env.example .env
+docker compose up --build -d
+./scripts/prueba-humo.sh
+```
+
+> Esperar a que `docker compose ps` muestre todos los contenedores en estado `healthy` (Keycloak tarda ~30–90 s en el primer arranque) antes de correr `./scripts/prueba-humo.sh`. En Windows puede ejecutarse con Git Bash (`bash ./scripts/prueba-humo.sh`).
+
+---
 
 ## 3. Arquitectura
 
-```
-Postman ──► Keycloak :8180 (OIDC, emite JWT con realm_access.roles)
+```text
+Cliente / Postman ──► Keycloak :8180 (OIDC, emite JWT con realm_access.roles)
    │
    └─JWT─► API Gateway :8080 (Security Filter + rutas + X-Correlation-ID)
                ├─► ms-animales   :8081  catálogo y máquina de estados del animal
@@ -51,178 +52,185 @@ Postman ──► Keycloak :8180 (OIDC, emite JWT con realm_access.roles)
    tpi-common (JAR Maven): errores, excepciones, conversor de roles, correlación — usado por los 3 servicios
 ```
 
-Diagramas C4 (PlantUML): [C1](docs/diagramas/C1-Contexto.puml), [C2](docs/diagramas/C2-Contenedores.puml)
-y la [secuencia de aprobación](docs/diagramas/Secuencia-aprobar.puml).
+**¿Por qué microservicios?** Los dominios tienen dueños de datos, reglas y ritmos de cambio independientes: `ms-animales` protege la máquina de estados del animal (un animal existe sin solicitudes), `ms-adopciones` orquesta el flujo de evaluación, plazos e historial, y `ms-donaciones` aísla por completo la integración con el proveedor de pagos.
 
-### C1 — Diagrama de Contexto
+**¿Por qué un API Gateway?** Centraliza el único punto de entrada público (`:8080`), valida el JWT en el borde, impide la exposición de rutas internas (`/internal/**`), estandariza las respuestas de error cuando un servicio aguas abajo no responde (`503`) y propaga un `X-Correlation-ID` para trazar cada petición de punta a punta.
+
+### Diagramas C4
+
+Fuentes PlantUML: [C1 — Contexto](docs/diagramas/C1-Contexto.puml), [C2 — Contenedores](docs/diagramas/C2-Contenedores.puml) y [Secuencia de aprobación](docs/diagramas/Secuencia-aprobar.puml).
+
+#### C1 — Diagrama de Contexto
 
 ![C1 - Diagrama de Contexto](docs/diagramas/C1-Contexto.svg)
 
-### C2 — Diagrama de Contenedores
+#### C2 — Diagrama de Contenedores
 
 ![C2 - Diagrama de Contenedores](docs/diagramas/C2-Contenedores.svg)
 
+### Módulos y tecnologías
+
 | Módulo | Responsabilidad | Puerto |
 |---|---|---|
-| `tpi-common` | JAR reutilizable: `ErrorResponse`, excepciones, `GlobalExceptionHandler`, `KeycloakRoleConverter`, 401/403 en JSON, `ResourceServerDefaults`, filtro e interceptor de correlación. No se despliega | — |
-| `ms-animales` | Dueño del animal y su estado; rechaza transiciones inválidas (R-13). API pública y API interna | 8081 |
-| `ms-adopciones` | Dueño del proceso: perfiles, solicitudes, evaluación (Georef), entrega, control, historial y tarea de vencimientos | 8082 |
-| `ms-donaciones` | Donaciones y su confirmación con Mercado Pago | 8083 |
-| `gateway` | Única entrada, enrutamiento, validación del JWT, errores uniformes | 8080 |
+| `tpi-common` | JAR compartido (no desplegable): `ErrorResponse`, excepciones de dominio, `GlobalExceptionHandler`, `KeycloakRoleConverter`, respuestas 401/403 en JSON, `ResourceServerDefaults`, filtro e interceptor de `X-Correlation-ID` | — |
+| `ms-animales` | Dueño del catálogo y de la máquina de estados del animal; valida transiciones (R-13). Expone API pública y API interna | `8081` |
+| `ms-adopciones` | Dueño del proceso de adopción: perfiles, solicitudes, evaluación (Georef), entrega, control final, historial y tarea programada de vencimientos | `8082` |
+| `ms-donaciones` | Creación de preferencias de pago y confirmación consultando Mercado Pago | `8083` |
+| `gateway` | Entrada única (Spring Cloud Gateway WebFlux), validación de JWT en el borde, enrutamiento, correlación y errores uniformes | `8080` |
 
-## 4. Tecnologías y versiones
-
-| Tecnología | Versión | Nota |
+| Tecnología | Versión | Notas |
 |---|---|---|
-| Java | 21 (bytecode `--release 21`) | Las imágenes usan Temurin 21 |
-| Spring Boot | 3.5.16 | Parche de la serie 3.5 que fija el contrato |
-| Spring Cloud | 2025.0.3 | Gateway: `spring-cloud-starter-gateway-server-webflux` |
-| springdoc-openapi | 2.8.17 | Línea compatible con Boot 3.5 |
-| PostgreSQL | 17 (alpine) | Negocio y Keycloak en instancias separadas |
-| Keycloak | 26.8.1 | Realm importado desde `infra/keycloak/realm-adopciones.json` |
-| H2 | gestionada por Boot | Solo en pruebas automatizadas |
+| Java | 21 (`--release 21`) | Imágenes Docker basadas en Eclipse Temurin 21 |
+| Spring Boot | 3.5.16 | MVC en microservicios; WebFlux en Gateway |
+| Spring Cloud | 2025.0.3 | `spring-cloud-starter-gateway-server-webflux` |
+| springdoc-openapi | 2.8.17 | Documentación OpenAPI 3 / Swagger UI por servicio |
+| PostgreSQL | 17 (Alpine) | Instancias separadas para negocio y Keycloak |
+| Keycloak | 26.8.1 | Realm importado automáticamente desde `infra/keycloak/realm-adopciones.json` |
+| H2 | Gestionada por Boot | Modo PostgreSQL en pruebas automatizadas |
 
-## 5. Reglas de negocio y dónde están
+---
 
-| Regla | Dónde se implementa | Prueba |
+## 4. Decisiones técnicas destacadas
+
+Las 14 decisiones arquitectónicas completas están documentadas en [docs/ADR.md](docs/ADR.md). Resumen de las principales:
+
+| Decisión | Resumen | ADR |
 |---|---|---|
-| R-01 animal disponible y sin otra PENDIENTE | `SolicitudService.crear`, columnas UNIQUE en `Solicitud` | `FlujoAdopcionIntegrationTest.r01*`, `SolicitudRepositoryTest` |
-| R-02 una solicitud activa por adoptante | `SolicitudService.crear`, columna `adoptante_activo` | `r02*`, `SolicitudRepositoryTest` |
-| R-03 perfil completo | `SolicitudService.crear`, `PerfilRequest` | `r03SinPerfilNoSePuedeSolicitar` |
-| R-04 incompatibilidad dura → RECHAZADA | `EvaluadorSolicitud.incompatibilidadDura` | `EvaluadorSolicitudTest`, `r04*` |
-| R-05 exterior sin patio → observación | `EvaluadorSolicitud.observacionesDeCompatibilidad` | `EvaluadorSolicitudTest.r05*` |
-| R-06 distancia con Georef | `EvaluadorSolicitud.evaluarDistancia`, `GeorefClient`, `CalculadoraDistancia` | `EvaluadorSolicitudTest.r06*`, `GeorefClientTest` |
-| R-07 aprobar solo PENDIENTE y animal reservable | `Solicitud.aprobar` + `AnimalesClient.cambiarEstado(RESERVADO)` | `r07*`, `siAnimalesNoResponde*` |
-| R-08 motivo y justificación | `Solicitud.verificarAprobable`, `SolicitudRequests.Motivo` | `SolicitudTest.r08*`, `r06YR08*` |
-| R-09 plazo de entrega | `Solicitud.plazoEntregaVencido`, `TareaVencimientos` | `r09*` |
-| R-10 entrega y fecha de control | `Solicitud.confirmarEntrega` | `SolicitudTest.r10*` |
-| R-11 control desde la fecha | `Solicitud.registrarControl` | `SolicitudTest.r11*`, flujo completo |
-| R-12 desfavorable o devolución → REVERTIDA | `Solicitud.registrarControl`, `Solicitud.devolver` | `r12*` |
-| R-13 sin NO_DISPONIBLE con adopción en curso | `Animal.marcarNoDisponible` | `AnimalTest.r13*` |
-| D-01 a D-04 | `DonacionService`, `Donacion`, `SecurityConfig` de donaciones | `FlujoDonacionIntegrationTest` |
+| Seguridad en dos capas y token de servicio | El Gateway valida JWT y bloquea `/internal/**`; cada servicio vuelve a validar firma/roles/pertenencia. `ms-adopciones` usa `client_credentials` (rol `SERVICIO`) para llamar a `ms-animales` en lugar de reenviar el token del usuario | [ADR-04](docs/ADR.md#adr-04-seguridad-en-dos-capas-y-token-de-servicio-trusted-zone) |
+| Emisor JWT fijo (`KC_HOSTNAME`) | Fija `iss=http://localhost:8180/realms/adopciones` para tokens pedidos desde el host o la red interna, descargando JWKS por `http://keycloak:8080/.../certs` sin *discovery* bloqueante al arrancar | [ADR-05](docs/ADR.md#adr-05-emisor-del-token-fijo-con-kc_hostname) |
+| Consistencia sin transacción distribuida | Persiste y hace `flush` del cambio local antes de invocar a `ms-animales`; si la llamada remota falla, la transacción local hace *rollback*. El caso residual queda registrado en logs | [ADR-06](docs/ADR.md#adr-06-consistencia-entre-servicios-sin-transacción-distribuida) |
+| Concurrencia sin bloqueos pesimistas | Columnas de bloqueo (`animal_pendiente`, `adoptante_activo`) con `UNIQUE` compatibles con PostgreSQL/H2, combinadas con bloqueo optimista (`@Version`) | [ADR-07](docs/ADR.md#adr-07-concurrencia-columnas-de-bloqueo-con-unique--bloqueo-optimista) |
+| Esquema y usuario por servicio | Una sola instancia PostgreSQL de negocio con esquemas y credenciales aisladas (`animales`, `adopciones`, `donaciones`) y base aparte para Keycloak | [ADR-08](docs/ADR.md#adr-08-persistencia-una-instancia-esquema-y-usuario-por-servicio-keycloak-aparte) |
+| Sin Lombok; `record` para DTOs | DTOs y propiedades como `record` de Java 21; entidades con métodos de dominio explícitos en lugar de *setters* abiertos | [ADR-12](docs/ADR.md#adr-12-sin-lombok-records-para-dto) |
 
-## 6. Seguridad
+---
 
-- **Autenticación:** el usuario obtiene su JWT de Keycloak (cliente público `tpi-client`). El backend nunca ve contraseñas.
-- **Gateway (Security Filter):** valida firma, emisor y vencimiento; solo deja pasar a `/api/**` tokens con rol ADOPTANTE o COORDINADOR; `/internal/**` no tiene ruta.
-- **Cada servicio vuelve a validar el JWT** y aplica la matriz de permisos por endpoint; la pertenencia (“esta solicitud es tuya”) la verifica el servicio (403).
-- **Llamadas internas:** ms-adopciones usa un token de servicio (client credentials, cliente `adopciones-service`, rol SERVICIO) para la API interna de Animales.
-- **Emisor del token:** `KC_HOSTNAME=http://localhost:8180` fija `iss` para todos los tokens; los servicios validan ese emisor y descargan las claves por `http://keycloak:8080/.../certs` (sin *discovery* al arrancar).
+## 5. Reglas de negocio y dónde están implementadas
 
-| Quién | Puede |
+| Regla | Descripción resumida | Implementación | Pruebas |
+|---|---|---|---|
+| **R-01** | Animal disponible y sin otra solicitud `PENDIENTE` | `SolicitudService.crear`, columnas `UNIQUE` en `Solicitud` | `FlujoAdopcionIntegrationTest.r01*`, `SolicitudRepositoryTest` |
+| **R-02** | Máximo una solicitud activa por adoptante | `SolicitudService.crear`, columna `adoptante_activo` | `r02*`, `SolicitudRepositoryTest` |
+| **R-03** | Perfil del adoptante completo antes de solicitar | `SolicitudService.crear`, `PerfilRequest` | `r03SinPerfilNoSePuedeSolicitar` |
+| **R-04** | Incompatibilidad dura (niños / otros animales) → `RECHAZADA` con traza | `EvaluadorSolicitud.incompatibilidadDura` | `EvaluadorSolicitudTest`, `r04*` |
+| **R-05** | Requiere espacio exterior sin patio → observación | `EvaluadorSolicitud.observacionesDeCompatibilidad` | `EvaluadorSolicitudTest.r05*` |
+| **R-06** | Cálculo de distancia con Georef (fallback no bloqueante si falla) | `EvaluadorSolicitud.evaluarDistancia`, `GeorefClient`, `CalculadoraDistancia` | `EvaluadorSolicitudTest.r06*`, `GeorefClientTest` |
+| **R-07** | Aprobar solo en `PENDIENTE` y reservando en `ms-animales` | `Solicitud.aprobar` + `AnimalesClient.cambiarEstado(RESERVADO)` | `r07*`, `siAnimalesNoResponde*` |
+| **R-08** | Motivo obligatorio en rechazo y justificación ante excepción | `Solicitud.verificarAprobable`, `SolicitudRequests.Motivo` | `SolicitudTest.r08*`, `r06YR08*` |
+| **R-09** | Entrega dentro del plazo (con cancelación automática al vencer) | `Solicitud.plazoEntregaVencido`, `TareaVencimientos` | `r09*` |
+| **R-10** | Confirmación de entrega fija fecha de control final | `Solicitud.confirmarEntrega` | `SolicitudTest.r10*` |
+| **R-11** | Control final habilitado recién desde la fecha pactada | `Solicitud.registrarControl` | `SolicitudTest.r11*`, flujo completo |
+| **R-12** | Control desfavorable o devolución → `REVERTIDA` y animal `DISPONIBLE` | `Solicitud.registrarControl`, `Solicitud.devolver` | `r12*` |
+| **R-13** | Un animal con adopción en curso no puede marcarse `NO_DISPONIBLE` | `Animal.marcarNoDisponible` | `AnimalTest.r13*` |
+| **D-01 a D-04** | Monto mínimo, confirmación vía Mercado Pago, idempotencia por pago y pertenencia | `DonacionService`, `Donacion`, `SecurityConfig` de donaciones | `FlujoDonacionIntegrationTest` |
+
+---
+
+## 6. Seguridad, persistencia, ejecución, pruebas y cobertura
+
+### Seguridad
+
+- **Autenticación OIDC:** Los usuarios obtienen su JWT de Keycloak mediante el cliente público `tpi-client`. Ningún servicio maneja contraseñas.
+- **Defensa en profundidad:** El Gateway valida firma, emisor y expiración, restringiendo `/api/**` a roles `ADOPTANTE` o `COORDINADOR` y bloqueando `/internal/**`. Cada microservicio revalida el JWT y aplica autorización fina por rol y pertenencia del recurso (`403` si el recurso pertenece a otro usuario).
+- **Comunicación servicio-a-servicio:** `ms-adopciones` obtiene su propio token con `client_credentials` (cliente confidencial `adopciones-service`, rol `SERVICIO`) para operar contra `/internal/animales/**`.
+
+| Rol / Acceso | Alcance permitido |
 |---|---|
-| Sin token | `/actuator/health` (y Swagger directo en cada servicio cuando `SWAGGER_ENABLED=true`) |
-| ADOPTANTE | su perfil; crear, ver, cancelar sus solicitudes; pedir devolución; ver animales; donar y ver sus donaciones |
-| COORDINADOR | administrar animales; ver y decidir solicitudes; perfiles de postulantes; entrega; control final; todas las donaciones y el total |
-| SERVICIO | solo `/internal/animales/**` |
+| Sin token | `/actuator/health` (y Swagger UI directo en cada servicio si `SWAGGER_ENABLED=true`) |
+| `ADOPTANTE` | Su perfil; crear, consultar y cancelar sus solicitudes; pedir devolución; consultar animales; donar y consultar sus donaciones |
+| `COORDINADOR` | Administrar animales; listar y decidir solicitudes; consultar perfiles de postulantes; confirmar entrega y control final; consultar todas las donaciones y el total confirmado |
+| `SERVICIO` | Exclusivamente `/internal/animales/**` |
 
-## 7. Persistencia
+### Persistencia
 
-Una instancia PostgreSQL de negocio con un esquema por servicio y un usuario dueño de cada esquema
-(`infra/postgres/init/01-esquemas.sh`): ningún servicio puede leer las tablas de otro. Keycloak usa su
-propia instancia (`keycloak-db`). Tablas creadas por JPA (`ddl-auto: update`). Volúmenes nombrados:
-`tpi-postgres-data`, `tpi-keycloak-db-data` (los datos sobreviven a `docker compose down`).
+- Una instancia PostgreSQL 17 para negocio con un esquema y un usuario dueño por servicio ([infra/postgres/init/01-esquemas.sh](infra/postgres/init/01-esquemas.sh)): ningún servicio tiene permisos sobre las tablas de otro.
+- Instancia PostgreSQL dedicada para Keycloak (`keycloak-db`).
+- Volúmenes nombrados (`tpi-postgres-data`, `tpi-keycloak-db-data`) para preservar datos entre reinicios.
 
-## 8. Ejecución
+### Ejecución detallada
 
-### Requisitos
-JDK 21 (o superior), Maven 3.9+, Docker con el plugin Compose v2 e Internet (Georef, Mercado Pago,
-descarga de imágenes y dependencias).
+**Requisitos:** JDK 21+, Maven 3.9+, Docker con Compose v2 y acceso a Internet (descarga de imágenes/dependencias, Georef y Mercado Pago).
 
-### Pasos
-```bash
-cp .env.example .env
-```
-Editar `.env`: contraseñas, `ADOPCIONES_SERVICE_CLIENT_SECRET`, `DEMO_USERS_PASSWORD` y, para donar,
-`MP_ACCESS_TOKEN` de la **cuenta vendedora de prueba**. Para la demostración conviene
-`PERIODO_ADAPTACION_DIAS=0`.
+1. **Configurar variables de entorno:**
+   ```bash
+   cp .env.example .env
+   ```
+   Ajustar las contraseñas en `.env` (`ADOPCIONES_SERVICE_CLIENT_SECRET`, `DEMO_USERS_PASSWORD`, credenciales de PostgreSQL/Keycloak) y, para probar donaciones reales contra sandbox, completar `MP_ACCESS_TOKEN` con el token de una cuenta vendedora de prueba de Mercado Pago. Por defecto `PERIODO_ADAPTACION_DIAS=0` permite recorrer el flujo completo sin esperar (en operación normal usar `30`).
 
-```bash
-mvn clean install
-```
-Compila todo, ejecuta las pruebas e instala `tpi-common` en `~/.m2`.
+2. **Levantar con Docker Compose:**
+   ```bash
+   # Desarrollo (publica Gateway :8080, Keycloak :8180, servicios :8081-:8083 y Postgres :5433)
+   docker compose up --build -d
 
-```bash
-docker compose up --build -d
-```
-Levanta las 7 piezas. Los Dockerfiles compilan desde la raíz del repositorio: no necesitan JARs del host.
+   # Verificar estado (esperar healthy en los 7 contenedores)
+   docker compose ps
 
-```bash
-docker compose ps
-```
-Esperar a que todos figuren `healthy` (Keycloak tarda 30–90 s).
+   # Modo restringido (solo publica Gateway :8080 y Keycloak :8180)
+   docker compose -f docker-compose.yml up --build -d
+   ```
 
-```bash
-./scripts/prueba-humo.sh
-```
-Con `DEMO_USERS_PASSWORD` exportada, recorre el proceso central por el Gateway.
+3. **Operación y pruebas manuales:**
+   ```bash
+   # Prueba de humo end-to-end a través del Gateway
+   ./scripts/prueba-humo.sh
 
-Luego importar en Postman `postman/TPI-Adopciones.postman_collection.json` y
-`postman/TPI-local.postman_environment.json` (completar `demoPassword`).
+   # Logs con formato [servicio] [X-Correlation-ID]
+   docker compose logs -f ms-adopciones
 
-### Operación
-```bash
-docker compose down
-```
-Detiene y conserva los datos.
+   # Detener conservando volúmenes / reinicio limpio (reimporta el realm y los esquemas)
+   docker compose down
+   docker compose down -v
+   ```
+   También se incluye la colección [postman/TPI-Adopciones.postman_collection.json](postman/TPI-Adopciones.postman_collection.json) y el entorno [postman/TPI-local.postman_environment.json](postman/TPI-local.postman_environment.json) (completar `demoPassword`).
 
-```bash
-docker compose down -v
-```
-Borra también los volúmenes (base limpia; Keycloak reimporta el realm).
+4. **Ejecución local sin Docker (para desarrollo):**
+   Con `postgres` (`localhost:5433`) y `keycloak` (`localhost:8180`) activos, compilar e instalar `tpi-common` con `mvn clean install` y levantar cada servicio con `mvn -pl <modulo> spring-boot:run`.
+
+5. **Documentación OpenAPI / Swagger UI (en desarrollo):**
+   `http://localhost:8081/swagger-ui.html`, `http://localhost:8082/swagger-ui.html` y `http://localhost:8083/swagger-ui.html`.
+
+### Pruebas y cobertura
+
+Las pruebas automatizadas no requieren Docker, Keycloak ni acceso a Internet: usan H2 en modo PostgreSQL, `MockRestServiceServer` para contratos HTTP externos, `@MockitoBean` en flujos de integración, `Clock` inyectable para vencimientos y `jwt()`/`mockJwt()` de Spring Security Test.
 
 ```bash
-docker compose -f docker-compose.yml up --build -d
+# Compila el reactor una sola vez, ejecuta toda la suite y genera reportes JaCoCo
+mvn -B clean verify
 ```
-Modo “producción”: solo publica el Gateway (8080) y Keycloak (8180).
 
-```bash
-docker compose logs -f ms-adopciones
-```
-Logs con `[servicio] [X-Correlation-ID]` en cada línea.
-
-### Sin Docker (desarrollo)
-Con PostgreSQL en `localhost:5433` (el contenedor `postgres` con el override) y Keycloak en
-`localhost:8180`, cada servicio arranca con `mvn -pl <modulo> spring-boot:run`; los valores por defecto
-de `application.yml` apuntan a esas direcciones.
-
-### Documentación OpenAPI
-`http://localhost:8081/swagger-ui.html`, `:8082` y `:8083` (puertos publicados por el override).
-
-## 9. Pruebas
-
-```bash
-mvn clean install
-```
-| Módulo | Qué verifica |
+| Módulo | Cobertura de pruebas |
 |---|---|
-| tpi-common | conversor de roles, manejador global de errores, filtro de correlación |
-| ms-animales | máquina de estados y R-13, repositorio (H2), matriz de permisos, arranque con datos demo |
-| ms-adopciones | agregado `Solicitud` (R-07 a R-12), evaluador (R-04 a R-06), Haversine, clientes HTTP de Animales, Georef y Keycloak con servidor simulado, restricciones UNIQUE, **flujo completo** por HTTP con seguridad, fallas de Animales y Georef, vencimientos con reloj controlado |
-| ms-donaciones | cliente de Mercado Pago (contrato y fallas), flujo D-01 a D-04 |
-| gateway | 401/403, API interna no publicada, servicio caído → 503, correlación, 404 |
+| `tpi-common` | Conversor de roles de Keycloak, `GlobalExceptionHandler`, filtro de `X-Correlation-ID` |
+| `ms-animales` | Máquina de estados y R-13, repositorio JPA (H2), matriz de permisos, carga de datos demo |
+| `ms-adopciones` | Agregado `Solicitud` (R-07..R-12), `EvaluadorSolicitud` (R-04..R-06), Haversine, clientes HTTP (`AnimalesClient`, `GeorefClient`, `ServiceTokenProvider`), unicidad `UNIQUE`, flujo end-to-end por HTTP con seguridad, tolerancia a fallas y vencimientos con reloj controlado |
+| `ms-donaciones` | `MercadoPagoClient` (contratos y fallas), flujo completo D-01..D-04 |
+| `gateway` | 401/403, bloqueo de `/internal/**`, servicio caído → `503`, correlación y `404` |
 
-Las pruebas no requieren Docker, Keycloak ni Internet (H2 y dobles de prueba). El resultado de la
-última ejecución está registrado en [AUDITORIA.md](docs/AUDITORIA.md).
+Los reportes de cobertura de **JaCoCo** se generan localmente en `<módulo>/target/site/jacoco/index.html` y se publican automáticamente como artifact (`jacoco-reports`) en cada ejecución del workflow de GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)).
 
-## 10. Errores frecuentes
+---
 
-| Síntoma | Causa y solución |
-|---|---|
-| Todo responde 401 con un token recién emitido | El `iss` del token no coincide. Decodificar el token: debe ser `http://localhost:8180/realms/adopciones`. Pedir el token a `localhost:8180`, no a otro host |
-| `POST /api/solicitudes` responde 503 | ms-animales caído o el secreto del cliente `adopciones-service` no coincide con el realm (ver logs de ms-adopciones: “Animales rechazó el token de servicio”) |
-| Keycloak no queda `healthy` | Primera descarga lenta o `keycloak-db` sin iniciar; `docker compose logs keycloak` |
-| Cambié el realm JSON y no se aplica | `--import-realm` no pisa un realm existente: `docker compose down -v` |
-| `POST /api/donaciones` responde 503 | `MP_ACCESS_TOKEN` vacío o inválido (log: “Revisar MP_ACCESS_TOKEN”) |
-| El script de init de PostgreSQL no corre | Solo corre con el volumen vacío; en Windows, el archivo debe tener fin de línea LF (`.gitattributes` lo fuerza) |
-| `distanciaNoVerificada: true` | Georef no respondió o no encontró la dirección: comportamiento esperado (R-06) |
+## 7. Limitaciones conocidas y próximos pasos
 
-## 11. Limitaciones conocidas
+### Limitaciones actuales
+- **Cálculo de distancia:** se calcula en línea recta (Haversine) y no por distancia vial real.
+- **Sin webhooks de Mercado Pago:** al ejecutarse en entorno local sin HTTPS público, el estado de una donación se sincroniza por consulta (*polling* bajo demanda) en lugar de notificaciones *push*.
+- **Consistencia entre servicios:** no hay patrón Outbox ni reconciliación automática; si `ms-animales` confirma una reserva y el *commit* local de `ms-adopciones` falla inmediatamente después, requiere intervención manual ([ADR-06](docs/ADR.md#adr-06-consistencia-entre-servicios-sin-transacción-distribuida)).
+- **Evolución de esquema:** se usa `hibernate.ddl-auto: update` sin migraciones versionadas.
+- **Configuración de Keycloak local:** se utiliza `start-dev` (HTTP sin TLS) y *Resource Owner Password Grant* en `tpi-client` para facilitar pruebas locales y desde Postman.
+- **Seguimiento de vencimientos:** la tarea programada automatiza R-09 (entrega vencida); los controles finales vencidos (R-11) se consultan filtrando solicitudes `EN_ADAPTACION` por `fechaControl`.
 
-- La distancia es en línea recta (Haversine), no por ruta.
-- Sin webhooks de Mercado Pago: una donación se actualiza al consultarla.
-- No hay transacción distribuida: si Animales confirma un cambio y luego falla el *commit* local (caso
-  residual), queda una inconsistencia que debe corregirse a mano (ver ADR-06).
-- `start-dev` de Keycloak (HTTP, sin TLS) y cliente con *password grant*: simplificaciones para entorno local de desarrollo.
-- La tarea programada cubre R-09; el control final vencido (R-11) se consulta filtrando
-  `EN_ADAPTACION` por `fechaControl`, sin automatismo.
+### Próximos pasos
+- Incorporar **Flyway** para versionar los esquemas de cada microservicio y pasar JPA a `ddl-auto: validate`.
+- Implementar un **Outbox transaccional** o una tarea de reconciliación periódica para cubrir el caso residual de [ADR-06](docs/ADR.md#adr-06-consistencia-entre-servicios-sin-transacción-distribuida).
+- Añadir un endpoint de **webhook de Mercado Pago** con verificación de firma sobre HTTPS.
+- Migrar la autenticación de usuarios a **Authorization Code + PKCE** cuando se integre un frontend, deshabilitando *password grant* y usando Keycloak en modo producción detrás de TLS.
+- Exponer métricas y trazas distribuidas (**Micrometer + OpenTelemetry / Prometheus**) sobre el `X-Correlation-ID` existente.
+
+<!-- TODO: agregar enlace a despliegue en vivo o colección pública si se publica en cloud -->
+
+---
+
+## 8. Licencia
+
+Distribuido bajo licencia **MIT**. Ver [LICENSE](LICENSE) para más detalles.
