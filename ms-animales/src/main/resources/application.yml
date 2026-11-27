@@ -8,6 +8,10 @@ spring:
     url: ${DB_URL:jdbc:postgresql://localhost:5433/tpi}
     username: ${DB_USER:animales_user}
     password: ${DB_PASSWORD:animales_pass}
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:10}
+      minimum-idle: ${DB_POOL_MIN_IDLE:2}
+      connection-timeout: ${DB_POOL_CONNECTION_TIMEOUT_MS:5000}
   flyway:
     default-schema: animales
     schemas:
@@ -20,6 +24,7 @@ spring:
       hibernate:
         # Cada servicio trabaja solo en su esquema; su usuario no tiene permisos sobre los otros
         default_schema: animales
+        default_batch_fetch_size: 50
   security:
     oauth2:
       resourceserver:
