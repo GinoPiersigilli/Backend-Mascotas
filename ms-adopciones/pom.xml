@@ -44,6 +44,11 @@
             <groupId>utnfc.isi.back.tpi</groupId>
             <artifactId>tpi-common</artifactId>
         </dependency>
+        <!-- Circuit breaker para clientes HTTP (version gestionada por Spring Cloud BOM) -->
+        <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-circuitbreaker</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>

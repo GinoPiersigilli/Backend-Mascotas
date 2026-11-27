@@ -1,5 +1,9 @@
 package utnfc.isi.back.tpi.adopciones.config;
 
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -8,23 +12,40 @@ import utnfc.isi.back.tpi.adopciones.client.AnimalesClient;
 import utnfc.isi.back.tpi.adopciones.client.GeorefClient;
 import utnfc.isi.back.tpi.adopciones.client.ServiceTokenProvider;
 import utnfc.isi.back.tpi.common.correlation.CorrelationIdInterceptor;
+import utnfc.isi.back.tpi.common.exception.ServicioNoDisponibleException;
 
 import java.time.Clock;
 import java.time.Duration;
 
 /**
- * Crea los clientes HTTP con RestClient (Spring MVC) y tiempos
- * maximos de espera: si otro sistema no responde, la operacion falla rapido y de forma
- * controlada en lugar de dejar hilos colgados.
+ * Crea los clientes HTTP con RestClient (Spring MVC), timeouts explicitos de conexion y lectura,
+ * y circuit breakers de Resilience4j para los clientes con comportamiento degradado definido.
  */
 @Configuration
 public class ClientesConfig {
 
-    private static SimpleClientHttpRequestFactory conTimeout(Duration timeout) {
+    private static final Logger log = LoggerFactory.getLogger(ClientesConfig.class);
+
+    private static SimpleClientHttpRequestFactory conTimeouts(Duration connectTimeout, Duration readTimeout) {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(timeout);
-        factory.setReadTimeout(timeout);
+        factory.setConnectTimeout(connectTimeout);
+        factory.setReadTimeout(readTimeout);
         return factory;
+    }
+
+    private static CircuitBreaker crearCircuito(String nombre, IntegracionesProperties.Circuito cfg) {
+        CircuitBreakerConfig config = CircuitBreakerConfig.custom()
+                .failureRateThreshold(cfg.failureRateThreshold())
+                .slidingWindowSize(cfg.slidingWindowSize())
+                .minimumNumberOfCalls(cfg.minimumNumberOfCalls())
+                .waitDurationInOpenState(cfg.waitDurationInOpenState())
+                .permittedNumberOfCallsInHalfOpenState(cfg.permittedNumberOfCallsInHalfOpenState())
+                .recordExceptions(ServicioNoDisponibleException.class)
+                .build();
+        CircuitBreaker cb = CircuitBreaker.of(nombre, config);
+        cb.getEventPublisher().onStateTransition(ev ->
+                log.warn("CircuitBreaker '{}': {}", nombre, ev.getStateTransition()));
+        return cb;
     }
 
     @Bean
@@ -35,27 +56,31 @@ public class ClientesConfig {
     @Bean
     ServiceTokenProvider serviceTokenProvider(IntegracionesProperties props, Clock clock) {
         IntegracionesProperties.Keycloak kc = props.keycloak();
-        RestClient restClient = RestClient.builder().requestFactory(conTimeout(kc.timeout())).build();
+        RestClient restClient = RestClient.builder()
+                .requestFactory(conTimeouts(kc.connectTimeout(), kc.readTimeout()))
+                .build();
         return new ServiceTokenProvider(restClient, kc.tokenUri(), kc.clientId(), kc.clientSecret(), clock);
     }
 
     @Bean
     AnimalesClient animalesClient(IntegracionesProperties props, ServiceTokenProvider tokenProvider) {
+        IntegracionesProperties.Animales cfg = props.animales();
         RestClient restClient = RestClient.builder()
-                .baseUrl(props.animales().baseUrl())
-                .requestFactory(conTimeout(props.animales().timeout()))
+                .baseUrl(cfg.baseUrl())
+                .requestFactory(conTimeouts(cfg.connectTimeout(), cfg.readTimeout()))
                 // reenvia el X-Correlation-ID para seguir la operacion entre servicios
                 .requestInterceptor(new CorrelationIdInterceptor())
                 .build();
-        return new AnimalesClient(restClient, tokenProvider);
+        return new AnimalesClient(restClient, tokenProvider, crearCircuito("animales", cfg.circuitBreaker()));
     }
 
     @Bean
     GeorefClient georefClient(IntegracionesProperties props) {
+        IntegracionesProperties.Georef cfg = props.georef();
         RestClient restClient = RestClient.builder()
-                .baseUrl(props.georef().baseUrl())
-                .requestFactory(conTimeout(props.georef().timeout()))
+                .baseUrl(cfg.baseUrl())
+                .requestFactory(conTimeouts(cfg.connectTimeout(), cfg.readTimeout()))
                 .build();
-        return new GeorefClient(restClient);
+        return new GeorefClient(restClient, crearCircuito("georef", cfg.circuitBreaker()));
     }
 }
