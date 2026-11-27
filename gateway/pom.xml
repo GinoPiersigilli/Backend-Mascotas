@@ -29,6 +29,11 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
+        <!-- Propaga correlationId entre el Context de Reactor y el MDC de SLF4J en WebFlux -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>context-propagation</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>org.springframework.boot</groupId>

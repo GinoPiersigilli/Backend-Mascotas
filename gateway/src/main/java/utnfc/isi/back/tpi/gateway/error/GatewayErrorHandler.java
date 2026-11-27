@@ -2,6 +2,7 @@ package utnfc.isi.back.tpi.gateway.error;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
@@ -39,37 +40,39 @@ public class GatewayErrorHandler implements WebExceptionHandler {
     @Override
     public Mono<Void> handle(ServerWebExchange exchange, Throwable ex) {
         String correlationId = exchange.getAttributeOrDefault(CorrelationIdGlobalFilter.ATTR, "-");
-        if (esCausadoPor(ex, TimeoutException.class)) {
-            log.warn("[{}] Tiempo de espera agotado para {}: {}", correlationId, exchange.getRequest().getPath(), ex.getMessage());
-            return errorWriter.escribir(exchange, HttpStatus.GATEWAY_TIMEOUT,
-                    JsonErrorWriter.descripcion(HttpStatus.GATEWAY_TIMEOUT),
-                    "El servicio que atiende esta ruta no respondio a tiempo");
-        }
-        if (esCausadoPor(ex, ConnectException.class) || esCausadoPor(ex, UnknownHostException.class)
-                || esCausadoPor(ex, ClosedChannelException.class) || esCausadoPor(ex, IOException.class)) {
-            log.warn("[{}] Servicio interno no disponible para {}: {}", correlationId, exchange.getRequest().getPath(), ex.getMessage());
-            return errorWriter.escribir(exchange, HttpStatus.SERVICE_UNAVAILABLE,
-                    JsonErrorWriter.descripcion(HttpStatus.SERVICE_UNAVAILABLE),
-                    "El servicio que atiende esta ruta no esta disponible");
-        }
-        if (ex instanceof ResponseStatusException rse) {
-            HttpStatus status = HttpStatus.resolve(rse.getStatusCode().value());
-            if (status == null) {
-                status = HttpStatus.INTERNAL_SERVER_ERROR;
-            }
-            if (status == HttpStatus.GATEWAY_TIMEOUT) {
-                return errorWriter.escribir(exchange, status, JsonErrorWriter.descripcion(status),
+        try (MDC.MDCCloseable ignored = MDC.putCloseable(CorrelationIdGlobalFilter.MDC_KEY, correlationId)) {
+            if (esCausadoPor(ex, TimeoutException.class)) {
+                log.warn("Tiempo de espera agotado para {}: {}", exchange.getRequest().getPath(), ex.getMessage());
+                return errorWriter.escribir(exchange, HttpStatus.GATEWAY_TIMEOUT,
+                        JsonErrorWriter.descripcion(HttpStatus.GATEWAY_TIMEOUT),
                         "El servicio que atiende esta ruta no respondio a tiempo");
             }
-            String mensaje = status == HttpStatus.NOT_FOUND
-                    ? "No existe el recurso " + exchange.getRequest().getPath().value()
-                    : status.getReasonPhrase();
-            return errorWriter.escribir(exchange, status, JsonErrorWriter.descripcion(status), mensaje);
+            if (esCausadoPor(ex, ConnectException.class) || esCausadoPor(ex, UnknownHostException.class)
+                    || esCausadoPor(ex, ClosedChannelException.class) || esCausadoPor(ex, IOException.class)) {
+                log.warn("Servicio interno no disponible para {}: {}", exchange.getRequest().getPath(), ex.getMessage());
+                return errorWriter.escribir(exchange, HttpStatus.SERVICE_UNAVAILABLE,
+                        JsonErrorWriter.descripcion(HttpStatus.SERVICE_UNAVAILABLE),
+                        "El servicio que atiende esta ruta no esta disponible");
+            }
+            if (ex instanceof ResponseStatusException rse) {
+                HttpStatus status = HttpStatus.resolve(rse.getStatusCode().value());
+                if (status == null) {
+                    status = HttpStatus.INTERNAL_SERVER_ERROR;
+                }
+                if (status == HttpStatus.GATEWAY_TIMEOUT) {
+                    return errorWriter.escribir(exchange, status, JsonErrorWriter.descripcion(status),
+                            "El servicio que atiende esta ruta no respondio a tiempo");
+                }
+                String mensaje = status == HttpStatus.NOT_FOUND
+                        ? "No existe el recurso " + exchange.getRequest().getPath().value()
+                        : status.getReasonPhrase();
+                return errorWriter.escribir(exchange, status, JsonErrorWriter.descripcion(status), mensaje);
+            }
+            log.error("Error inesperado en el Gateway para {}", exchange.getRequest().getPath(), ex);
+            return errorWriter.escribir(exchange, HttpStatus.INTERNAL_SERVER_ERROR,
+                    JsonErrorWriter.descripcion(HttpStatus.INTERNAL_SERVER_ERROR),
+                    "Error interno del Gateway");
         }
-        log.error("[{}] Error inesperado en el Gateway para {}", correlationId, exchange.getRequest().getPath(), ex);
-        return errorWriter.escribir(exchange, HttpStatus.INTERNAL_SERVER_ERROR,
-                JsonErrorWriter.descripcion(HttpStatus.INTERNAL_SERVER_ERROR),
-                "Error interno del Gateway");
     }
 
     private static boolean esCausadoPor(Throwable ex, Class<? extends Throwable> tipo) {
