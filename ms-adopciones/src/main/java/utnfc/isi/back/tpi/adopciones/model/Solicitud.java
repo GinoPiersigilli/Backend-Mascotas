@@ -127,6 +127,7 @@ public class Solicitud {
 
     @OneToMany(mappedBy = "solicitud", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("fecha ASC, id ASC")
+    @BatchSize(size = 50)
     private List<EventoSolicitud> eventos = new ArrayList<>();
 
     @Version

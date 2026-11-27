@@ -4,7 +4,8 @@ Este documento describe el procedimiento reproducible para medir el impacto de l
 
 ## 1. Optimizaciones aplicadas
 
-- **Eliminación de N+1 en `SolicitudService.listar()`:** `@BatchSize(size = 50)` sobre `Solicitud.observaciones` (`@ElementCollection`, carga perezosa). Permite combinar carga en lotes con paginación futura sin incurrir en paginación en memoria (`HHH90003004`). `Solicitud.eventos` no se lee al construir `SolicitudResponse`, por lo que no genera N+1 en el listado.
+- **Eliminación de N+1 en `SolicitudService.listar()`:** `@BatchSize(size = 50)` sobre `Solicitud.observaciones` (`@ElementCollection`) y `Solicitud.eventos` (`@OneToMany`), más `hibernate.default_batch_fetch_size: 50` y `spring.jpa.open-in-view: false` en los tres servicios. Permite combinar carga en lotes con paginación real en SQL (`LIMIT`/`OFFSET`) sin incurrir en paginación en memoria (`HHH90003004`). Verificado en `SolicitudListarQueryCountTest` (2 queries constantes para N=5 y N=25).
+- **Pool HikariCP explícito:** configurado por variables de entorno en los tres servicios (`DB_POOL_MAX_SIZE=10`, `DB_POOL_MIN_IDLE=2`, `DB_POOL_CONNECTION_TIMEOUT_MS=5000`).
 - **Índices agregados (sin duplicar los índices B-tree generados por las `PRIMARY KEY` y constraints `UNIQUE`):**
   - `adopciones.solicitud`: `idx_solicitud_adoptante_id (adoptante_id)`, `idx_solicitud_animal_estado (animal_id, estado)`, `idx_solicitud_estado_fecha_aprobacion (estado, fecha_aprobacion)`.
   - `donaciones.donacion`: `idx_donacion_donante_id (donante_id)`, `idx_donacion_estado (estado)`.
@@ -35,7 +36,7 @@ SELECT
     'Animal-' || g,
     (ARRAY['PERRO', 'GATO', 'OTRO'])[1 + (g % 3)],
     (g % 120) + 1,
-    (ARRAY['CHICO', 'MEDIANO', 'GRANDE'])[1 + (g % 3)],
+    (ARRAY['PEQUENIO', 'MEDIANO', 'GRANDE'])[1 + (g % 3)],
     NULL,
     (g % 2 = 0),
     (g % 3 = 0),
@@ -162,13 +163,15 @@ WHERE estado = 'CONFIRMADA';
 
 ## 5. Resultados medidos
 
-<!-- TODO: completar esta tabla con los planes y tiempos reales de EXPLAIN (ANALYZE, BUFFERS) obtenidos sobre PostgreSQL 17 -->
+Ejecutado sobre **PostgreSQL 17 (`postgres:17-alpine`)** en Docker (`tpi-postgres`) con 10.000 filas sembradas por tabla (`ANALYZE` previo y rollback transaccional al finalizar):
 
-| Consulta | Índice evaluado | Plan sin índice | Tiempo / Buffers sin índice | Plan con índice | Tiempo / Buffers con índice |
-|---|---|---|---|---|---|
-| `TareaVencimientos` (`estado = 'APROBADA' AND fecha_aprobacion < ...`) | `idx_solicitud_estado_fecha_aprobacion` | `<!-- TODO -->` | `<!-- TODO -->` | `<!-- TODO -->` | `<!-- TODO -->` |
-| `SolicitudService.listar` (`adoptante_id = ?`) | `idx_solicitud_adoptante_id` | `<!-- TODO -->` | `<!-- TODO -->` | `<!-- TODO -->` | `<!-- TODO -->` |
-| `SolicitudService.crear` (`animal_id = ? AND estado = 'PENDIENTE'`) | `idx_solicitud_animal_estado` | `<!-- TODO -->` | `<!-- TODO -->` | `<!-- TODO -->` | `<!-- TODO -->` |
-| `AnimalService.listar` (`estado = 'DISPONIBLE' AND especie = 'PERRO'`) | `idx_animal_estado_especie` | `<!-- TODO -->` | `<!-- TODO -->` | `<!-- TODO -->` | `<!-- TODO -->` |
-| `DonacionService.listar` (`donante_id = ?`) | `idx_donacion_donante_id` | `<!-- TODO -->` | `<!-- TODO -->` | `<!-- TODO -->` | `<!-- TODO -->` |
-| `DonacionService.totalConfirmado` (`estado = 'CONFIRMADA'`) | `idx_donacion_estado` | `<!-- TODO -->` | `<!-- TODO -->` | `<!-- TODO -->` | `<!-- TODO -->` |
+| Consulta | Índice evaluado | Plan sin índice | Tiempo / Buffers sin índice | Plan con índice | Tiempo / Buffers con índice | Mejora |
+|---|---|---|---|---|---|---|
+| `TareaVencimientos` (`estado = 'APROBADA' AND fecha_aprobacion < ...`) | `idx_solicitud_estado_fecha_aprobacion` | `Seq Scan` (9.667 filtradas) | `1.139 ms` / `shared hit=154` | `Bitmap Index Scan` + `Bitmap Heap Scan` | `0.274 ms` / `shared hit=156` (índice: 2) | **4.2x** más rápida |
+| `SolicitudService.listar` (`adoptante_id = ?`) | `idx_solicitud_adoptante_id` | `Seq Scan` + `Sort` (9.991 filtradas) | `0.929 ms` / `shared hit=154` | `Bitmap Index Scan` + `Bitmap Heap Scan` + `Sort` | `0.210 ms` / `shared hit=12` | **4.4x** más rápida, **-92%** buffers |
+| `SolicitudService.crear` (`animal_id = ? AND estado = 'PENDIENTE'`) | `idx_solicitud_animal_estado` | `Seq Scan` + `Limit` (4.001 filtradas) | `0.558 ms` / `shared hit=63` | `Index Only Scan` | `0.103 ms` / `shared hit=6` | **5.4x** más rápida, **-90%** buffers |
+| `AnimalService.listar` (`estado = 'DISPONIBLE' AND especie = 'PERRO'`) | `idx_animal_estado_especie` | `Seq Scan` + `Sort` (9.337 filtradas) | `1.597 ms` / `shared hit=145` | `Bitmap Index Scan` + `Bitmap Heap Scan` + `Sort` | `0.448 ms` / `shared hit=147` | **3.6x** más rápida |
+| `DonacionService.listar` (`donante_id = ?`) | `idx_donacion_donante_id` | `Seq Scan` + `Sort` (9.991 filtradas) | `0.924 ms` / `shared hit=197` | `Bitmap Index Scan` + `Bitmap Heap Scan` + `Sort` | `0.204 ms` / `shared hit=12` | **4.5x** más rápida, **-94%** buffers |
+| `DonacionService.totalConfirmado` (`estado = 'CONFIRMADA'`) | `idx_donacion_estado` | `Seq Scan` + `Aggregate` (6.667 filtradas) | `2.324 ms` / `shared hit=197` | `Bitmap Index Scan` + `Bitmap Heap Scan` + `Aggregate` | `1.149 ms` / `shared hit=201` | **2.0x** más rápida |
+
+> **Observación:** en columnas de alta selectividad (`adoptante_id`, `donante_id`, `(animal_id, estado)`) los índices reducen la lectura de páginas en **90–94%** y alcanzan `Index Only Scan` en R-01. En columnas de baja cardinalidad como `donacion.estado` (~33 % de filas `CONFIRMADA` en la muestra), el `Bitmap Heap Scan` igual toca casi todos los bloques del heap, aunque reduce el tiempo a la mitad al evitar evaluar el filtro sobre 6.667 tuplas.
