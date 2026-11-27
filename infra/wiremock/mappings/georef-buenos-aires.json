@@ -1,0 +1,30 @@
+{
+  "priority": 1,
+  "request": {
+    "method": "GET",
+    "urlPath": "/georef/api/v2.0/direcciones",
+    "queryParameters": {
+      "provincia": {
+        "matches": "(?i).*buenos\\s*aires.*"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "cantidad": 1,
+      "direcciones": [
+        {
+          "nomenclatura": "AV. CORRIENTES 1000, Ciudad Autonoma de Buenos Aires",
+          "ubicacion": {
+            "lat": -34.6037,
+            "lon": -58.3816
+          }
+        }
+      ]
+    }
+  }
+}

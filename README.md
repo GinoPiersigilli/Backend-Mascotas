@@ -25,15 +25,15 @@ Interactúa con tres sistemas externos reales: **Keycloak** para autenticación 
 
 <!-- TODO: agregar GIF o capturas del flujo completo de adopción (Postman / Swagger UI / logs con X-Correlation-ID) -->
 
-Levantar el stack completo (7 contenedores: Gateway, 3 microservicios, Keycloak y 2 instancias PostgreSQL) y ejecutar la prueba de humo de punta a punta:
+Levantar el **perfil de demostración sin credenciales externas** (8 contenedores: Gateway, 3 microservicios, Keycloak, 2 instancias PostgreSQL y **WireMock** simulando Georef y Mercado Pago con los stubs de [infra/wiremock/mappings](infra/wiremock/mappings)) y recorrer el flujo completo P1–P5 en 3 comandos:
 
 ```bash
 cp .env.example .env
-docker compose up --build -d
+docker compose -f docker-compose.yml -f docker-compose.demo.yml up --build -d --wait
 ./scripts/prueba-humo.sh
 ```
 
-> Esperar a que `docker compose ps` muestre todos los contenedores en estado `healthy` (Keycloak tarda ~30–90 s en el primer arranque) antes de correr `./scripts/prueba-humo.sh`. En Windows puede ejecutarse con Git Bash (`bash ./scripts/prueba-humo.sh`).
+> `--wait` espera automáticamente a que los 8 contenedores pasen a estado `healthy` (Keycloak tarda ~30–90 s en el primer arranque; sustituye de forma nativa los placeholders `${...}` del realm). En Windows puede ejecutarse con Git Bash (`bash ./scripts/prueba-humo.sh`). Para conectar contra Georef y Mercado Pago reales en desarrollo, usar `docker compose up --build -d`.
 
 ---
 
@@ -169,13 +169,16 @@ Las 14 decisiones arquitectónicas completas están documentadas en [docs/ADR.md
 
 2. **Levantar con Docker Compose:**
    ```bash
-   # Desarrollo (publica Gateway :8080, Keycloak :8180, servicios :8081-:8083, Postgres :5433 y activa Swagger UI)
+   # Demo completa sin credenciales externas (WireMock simula Georef y Mercado Pago; solo publica Gateway :8080 y Keycloak :8180)
+   docker compose -f docker-compose.yml -f docker-compose.demo.yml up --build -d --wait
+
+   # Desarrollo contra APIs reales (publica Gateway :8080, Keycloak :8180, servicios :8081-:8083, Postgres :5433 y activa Swagger UI)
    docker compose up --build -d
 
-   # Verificar estado (esperar healthy en los 7 contenedores)
+   # Verificar estado (esperar healthy en todos los contenedores)
    docker compose ps
 
-   # Modo restringido (solo publica Gateway :8080 y Keycloak :8180; Swagger deshabilitado por defecto)
+   # Modo restringido contra APIs reales (solo publica Gateway :8080 y Keycloak :8180; Swagger deshabilitado por defecto)
    docker compose -f docker-compose.yml up --build -d
    ```
 

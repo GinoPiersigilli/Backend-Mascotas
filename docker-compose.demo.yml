@@ -1,0 +1,47 @@
+# Perfil de demostracion sin credenciales externas ni dependencia de Internet (Georef y Mercado Pago
+# simulados con WireMock usando los stubs versionados en infra/wiremock/mappings/).
+#
+# Uso (flujo completo P1-P5 sin MP_ACCESS_TOKEN):
+#   docker compose -f docker-compose.yml -f docker-compose.demo.yml up --build -d
+#   ./scripts/prueba-humo.sh
+services:
+  wiremock:
+    image: wiremock/wiremock:3.12.1
+    container_name: tpi-wiremock
+    command: ["--global-response-templating"]
+    volumes:
+      - ./infra/wiremock/mappings:/home/wiremock/mappings:ro
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /__admin/health HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q healthy <&3"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+    networks: [tpi-net]
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  ms-adopciones:
+    environment:
+      GEOREF_BASE_URL: http://wiremock:8080/georef/api/v2.0
+      PERIODO_ADAPTACION_DIAS: "0"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ms-animales:
+        condition: service_healthy
+      wiremock:
+        condition: service_healthy
+
+  ms-donaciones:
+    environment:
+      MP_BASE_URL: http://wiremock:8080
+      MP_ACCESS_TOKEN: demo-wiremock-token
+      MP_USAR_SANDBOX_INIT_POINT: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      wiremock:
+        condition: service_healthy
