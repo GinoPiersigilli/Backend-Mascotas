@@ -18,7 +18,7 @@ Formato: contexto → alternativas → decisión → consecuencias → evidencia
 
 - **Contexto:** al presentar y al decidir, Adopciones necesita el estado actual del animal y que Animales confirme la transición antes de responder al usuario.
 - **Alternativas:** mensajería asíncrona (RabbitMQ/Kafka), réplica local del catálogo, REST síncrono.
-- **Decisión:** REST síncrono con `RestClient` (lo que indica la cátedra para Spring MVC), timeouts de 3 s, a una API interna `/internal/animales/**` que el Gateway no enruta.
+- **Decisión:** REST síncrono con `RestClient` (Spring MVC), timeouts de 3 s, a una API interna `/internal/animales/**` que el Gateway no enruta.
 - **Consecuencias:** si Animales no responde, presentar y aprobar fallan con 503 (R-01 es bloqueante: “ante la duda no se avanza”). No se agrega infraestructura de mensajería. Acoplamiento temporal asumido.
 - **Evidencia:** `AnimalesClient`, `ClientesConfig`, `AnimalInternoController`, `gateway/application.yml` (sin ruta interna), prueba `siAnimalesNoRespondeAlAprobarLaSolicitudSiguePendiente`.
 
@@ -30,7 +30,7 @@ Formato: contexto → alternativas → decisión → consecuencias → evidencia
 
 ## ADR-04. Seguridad en dos capas y token de servicio (trusted zone)
 
-- **Contexto:** RC-07; el enunciado pide justificar la trusted zone.
+- **Contexto:** diseño de seguridad y delimitación de la *trusted zone*.
 - **Alternativas:** validar solo en el Gateway; reenviar el token del usuario a Animales; mTLS entre servicios.
 - **Decisión:** el Gateway valida el JWT (autenticación en el borde y rechazo de tokens de servicio en `/api/**`); **cada servicio vuelve a validarlo** y aplica la autorización fina por rol y por pertenencia. Adopciones obtiene su propio token (client credentials, rol SERVICIO) para la API interna. Los servicios no publican puertos en modo producción.
 - **Justificación:** si alguien alcanzara un servicio sin pasar por el Gateway, igual necesita un token válido y el rol correcto (verificado: llamada directa sin token → 401; usuario a `/internal` → 403). Reenviar el token del usuario haría que un COORDINADOR pudiera ordenar transiciones del proceso directamente.
@@ -83,12 +83,12 @@ Formato: contexto → alternativas → decisión → consecuencias → evidencia
 ## ADR-11. Mercado Pago sin webhooks
 
 - **Decisión:** Checkout Pro (preferencia + `init_point`); la confirmación se obtiene consultando `/v1/payments/search` por `external_reference` (UUID propio) al consultar la donación.
-- **Consecuencias:** sin endpoint público para notificaciones (no hay HTTPS público en el TPI); una donación puede quedar PENDIENTE hasta que alguien la consulte.
+- **Consecuencias:** sin endpoint público para notificaciones (no hay HTTPS público en entorno local); una donación puede quedar PENDIENTE hasta que alguien la consulte.
 - **Evidencia:** `MercadoPagoClient`, `DonacionService.obtener`.
 
 ## ADR-12. Sin Lombok; records para DTO
 
-- **Contexto:** la cátedra usa Lombok. El procesador de anotaciones depende de la versión del compilador (el equipo tiene JDK distintos).
+- **Contexto:** Lombok introduce un procesador de anotaciones acoplado a la versión del compilador (distintos entornos JDK).
 - **Decisión:** records para DTO y configuración; entidades con getters explícitos y métodos de dominio en lugar de setters.
 - **Consecuencia:** algo más de código, pero las entidades no exponen setters que permitan saltear las reglas.
 

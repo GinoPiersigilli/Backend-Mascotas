@@ -4,8 +4,8 @@
 
 | Prioridad | Fuente | Uso |
 |---|---|---|
-| 1 | Enunciado preliminar TPI 2026 (05/10/2026) | Requisitos técnicos obligatorios (RC-xx) |
-| 2 | “TPI 2026 — Alcance, compromiso y criterios de evaluación” y Rúbrica v0.11 | Cómo se evalúa: proceso central, reglas, colaboración, evidencia |
+| 1 | Especificación técnica del proyecto | Requisitos técnicos base (RC-xx) |
+| 2 | Definición de alcance y criterios de calidad | Proceso central, reglas, colaboración y evidencia |
 | 3 | Documento de dominio del equipo (v2) y `CONTRATOS.md` | Alcance comprometido (procesos P1–P5, reglas R-01..R-13, D-01..D-04) y contratos |
 | 4 | Esqueleto existente (pom multimódulo, Dockerfiles, `tpi-common` inicial, pings) | Se conservaron convenciones: paquetes, puertos, nombres de módulos y de variables |
 | 5 | Decisiones de diseño propias | Ver [ADR.md](ADR.md) |
@@ -13,7 +13,7 @@
 Las guías de Google Distance Matrix y OSRM se leyeron como alternativas de integración; el
 documento de dominio ya las descarta (clave paga y despliegue local, respectivamente) y se mantiene esa decisión.
 
-## A.2 Requisitos obligatorios del enunciado (criterios comunes)
+## A.2 Requisitos técnicos base
 
 | ID | Requisito | Componente | Evidencia |
 |---|---|---|---|
@@ -93,10 +93,10 @@ fuente externa, de transiciones de estado validadas en dos lugares y de plazos.
 |---|---|---|
 | 1 | R-04: CONTRATOS §7 dice 409; el dominio dice “la solicitud queda RECHAZADA con motivo” | Se sigue el dominio: 201 con `estado: RECHAZADA` (traza). Registrado en CONTRATOS §0 |
 | 2 | CONTRATOS fija Boot 3.5.0; existen parches 3.5.x | Se usa 3.5.16 (la propia regla del contrato lo permite) |
-| 3 | La guía de la cátedra usa springdoc 2.5.0 y Lombok | springdoc 2.8.17 (compatible con Boot 3.5). Sin Lombok: records para DTO y getters explícitos (sin procesador de anotaciones, compila con cualquier JDK ≥ 21). Ver ADR-12 |
+| 3 | springdoc 2.5.0 y Lombok vs. compatibilidad con Spring Boot 3.5 / JDK 21+ | springdoc 2.8.17 (compatible con Boot 3.5). Sin Lombok: records para DTO y getters explícitos (sin procesador de anotaciones, compila con cualquier JDK ≥ 21). Ver ADR-12 |
 | 4 | El dominio dice que la tarea programada vigila R-09 **y R-11** | No hay estado de “control vencido” definido. Se implementa R-09; R-11 vencido queda como consulta. Documentado como limitación |
 | 5 | R-09 “el Coordinador podría extender el plazo una vez (a validar)” | No implementado (no validado) |
-| 6 | Enunciado: “Swagger documentado”; CONTRATOS: Swagger sin token solo en desarrollo | Swagger está permitido a nivel servicio, que no se publica en modo producción; además `SWAGGER_ENABLED` lo apaga |
+| 6 | OpenAPI/Swagger documentado vs. exposición sin token solo en desarrollo | Swagger está permitido a nivel servicio, que no se publica en modo producción; además `SWAGGER_ENABLED` lo apaga |
 | 7 | Entorno: el JDK local es 27 y no hay *daemon* de Docker | Se compila con `--release 21`; las imágenes usan Temurin 21. Docker Compose no pudo ejecutarse aquí (ver AUDITORÍA) |
 
 ## A.7 Arquitectura, tecnologías y alternativas

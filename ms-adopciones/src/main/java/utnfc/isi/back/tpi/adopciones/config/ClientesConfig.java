@@ -13,7 +13,7 @@ import java.time.Clock;
 import java.time.Duration;
 
 /**
- * Crea los clientes HTTP (RestClient, como indica la catedra para Spring MVC) con tiempos
+ * Crea los clientes HTTP con RestClient (Spring MVC) y tiempos
  * maximos de espera: si otro sistema no responde, la operacion falla rapido y de forma
  * controlada en lugar de dejar hilos colgados.
  */

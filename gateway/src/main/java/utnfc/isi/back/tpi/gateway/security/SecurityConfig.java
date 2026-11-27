@@ -14,7 +14,7 @@ import org.springframework.security.web.server.context.NoOpServerSecurityContext
 import utnfc.isi.back.tpi.gateway.error.JsonErrorWriter;
 
 /**
- * Security Filter del Gateway (requisito del enunciado).
+ * Security Filter del Gateway.
  *
  * Responsabilidad: autenticacion en el borde. Valida firma, emisor y vencimiento del JWT
  * (Resource Server con las claves publicas de Keycloak) y solo deja pasar a /api/** tokens de

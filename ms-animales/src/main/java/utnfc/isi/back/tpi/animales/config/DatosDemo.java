@@ -17,7 +17,7 @@ import java.util.List;
 /**
  * Carga un catalogo inicial SOLO si la tabla esta vacia y la propiedad animales.datos-demo
  * es verdadera. Sirve para que la demostracion no dependa de cargas manuales improvisadas.
- * Cada animal esta pensado para mostrar una regla distinta (ver docs/DEFENSA.md).
+ * Cada animal esta pensado para ejercitar una regla de negocio distinta.
  */
 @Component
 @ConditionalOnProperty(name = "animales.datos-demo", havingValue = "true")

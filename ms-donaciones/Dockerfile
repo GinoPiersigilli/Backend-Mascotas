@@ -1,7 +1,7 @@
 # Construccion en dos etapas. El contexto de build es la RAIZ del repositorio (ver docker-compose.yml).
 # Etapa 1: instala el POM padre y el JAR comun en el repositorio Maven local (.m2) de la imagen y
-# luego compila el servicio, que resuelve tpi-common como dependencia Maven (mecanismo minimo
-# del enunciado), igual que en una maquina de desarrollo. No depende de ningun JAR del host.
+# luego compila el servicio, que resuelve tpi-common como dependencia Maven local, igual que en
+# una maquina de desarrollo. No depende de ningun JAR del host.
 FROM maven:3.9-eclipse-temurin-21 AS build
 WORKDIR /workspace
 COPY . .

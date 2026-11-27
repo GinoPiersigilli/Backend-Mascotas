@@ -1,4 +1,4 @@
-# Contratos del backend — TPI Backend 2026
+# Contratos del backend — Adopción responsable de animales
 
 **Estado:** propuesta para aprobación del equipo. Una vez aprobado, **nadie cambia un contrato por su cuenta**: se propone el cambio en un Merge Request que revisen las personas afectadas.
 
@@ -32,7 +32,7 @@ compromiso de alcance, comunicarse al equipo docente.
 | `groupId` | `utnfc.isi.back.tpi` |
 | Módulos | `tpi-common`, `ms-animales`, `ms-adopciones`, `ms-donaciones`, `gateway` (más la carpeta `infra/`) |
 | Paquetes base | `utnfc.isi.back.tpi.common`, `.animales`, `.adopciones`, `.donaciones`, `.gateway` |
-| Java y Spring | Java 21. Spring Boot 3.5.0 (la de la guía de la cátedra) con Spring Cloud 2025.0.0, que según el anuncio oficial de Spring es compatible con Boot 3.5.0 (se puede subir a un parche posterior de la misma serie). **Ojo:** desde esa versión de Spring Cloud el starter del Gateway se llama `spring-cloud-starter-gateway-server-webflux` y las propiedades empiezan con `spring.cloud.gateway.server.webflux`; los apuntes usan los nombres anteriores |
+| Java y Spring | Java 21. Spring Boot 3.5.0 con Spring Cloud 2025.0.0, que según el anuncio oficial de Spring es compatible con Boot 3.5.0 (se puede subir a un parche posterior de la misma serie). **Ojo:** desde esa versión de Spring Cloud el starter del Gateway se llama `spring-cloud-starter-gateway-server-webflux` y las propiedades empiezan con `spring.cloud.gateway.server.webflux` |
 | Capas dentro de cada servicio | `controller`, `service`, `repository`, `model`, `dto`, `exception`, `client` (llamadas a otros sistemas) |
 | Formato de datos | JSON. Fechas en formato ISO 8601. Los nombres de campos van en `camelCase` |
 | Identificador de usuario | El claim `sub` del JWT. Es el dueño de perfiles, solicitudes y donaciones |
@@ -55,7 +55,7 @@ El módulo `gateway` es reactivo (WebFlux) y **no depende de `tpi-common`**, que
 | `keycloak-db` | 5432 | No se publica | |
 
 - **Red:** una sola red llamada `tpi-net`. Los servicios se llaman por su nombre (por ejemplo `http://ms-animales:8081`).
-- **Compose:** `docker-compose.yml` (solo Gateway y Keycloak publicados) más `docker-compose.override.yml` (puertos de desarrollo), igual que en el apunte 22.
+- **Compose:** `docker-compose.yml` (solo Gateway y Keycloak publicados) más `docker-compose.override.yml` (puertos de desarrollo), separando configuración base y puertos de desarrollo.
 - Los puertos distintos por servicio permiten correrlos también fuera de Docker.
 
 ### Rutas del Gateway (sin reescritura de rutas)
@@ -77,7 +77,7 @@ El módulo `gateway` es reactivo (WebFlux) y **no depende de `tpi-common`**, que
 |---|---|
 | Realm | `adopciones` |
 | Roles de realm | `ADOPTANTE`, `COORDINADOR`, `SERVICIO` |
-| Cliente para usuarios | `tpi-client`, público (sin secreto), con acceso directo por usuario y contraseña habilitado para poder pedir tokens desde Postman. Es una simplificación válida para el TPI y no una práctica de producción |
+| Cliente para usuarios | `tpi-client`, público (sin secreto), con acceso directo por usuario y contraseña habilitado para poder pedir tokens desde Postman. Es una simplificación para entorno local de desarrollo y no una práctica de producción |
 | Cliente de servicio | `adopciones-service`, confidencial, con cuenta de servicio y el rol `SERVICIO` asignado |
 | Usuarios de prueba | `adoptante1`, `adoptante2` (rol ADOPTANTE) y `coordinador1` (rol COORDINADOR) |
 | Reproducibilidad | El realm se **exporta a un archivo y se importa al arrancar Keycloak**. No debe quedar ninguna configuración manual |
@@ -284,7 +284,7 @@ Endpoints agregados en v2: `GET /api/solicitudes/{id}/historial` (dueño o COORD
 | Instancia de negocio | Contenedor `postgres`, base `tpi`, un esquema por servicio: `animales`, `adopciones`, `donaciones` |
 | Usuarios | Uno por esquema (`animales_user`, `adopciones_user`, `donaciones_user`), con permisos solo sobre su esquema. Se crean con un script de inicialización |
 | Keycloak | Contenedor `keycloak-db` propio |
-| Volúmenes | Nombrados y descriptivos (`tpi-postgres-data`, `tpi-keycloak-db-data`), como recomienda el apunte 22 |
+| Volúmenes | Nombrados y descriptivos (`tpi-postgres-data`, `tpi-keycloak-db-data`) |
 | Esquema de tablas | `ddl-auto: update` de JPA (propuesta, por simplicidad; no se usan migraciones) |
 | Regla | Ningún servicio accede a las tablas de otro. Para saber el estado de un animal, Adopciones lo consulta por la API interna |
 | Unicidad (R-01) | Restricción en la base de Adopciones: una sola solicitud PENDIENTE por animal y una sola activa por adoptante |
@@ -322,23 +322,23 @@ Se definen en un archivo `.env` local que **no se versiona**. Se versiona `.env.
 
 - Cada servicio define su propia cadena de seguridad y reutiliza el conversor.
 - Las dependencias de Spring se declaran como `provided` para no arrastrarlas.
-- Versión `1.0.0-SNAPSHOT`. Se construye desde la raíz con `mvn clean install`, lo que lo instala en el repositorio local `.m2` (mecanismo mínimo que pide el enunciado).
+- Versión `1.0.0-SNAPSHOT`. Se construye desde la raíz con `mvn clean install`, lo que lo instala en el repositorio local `.m2`.
 
 ---
 
 ## 13. Docker
 
 - Un `Dockerfile` por servicio, con **contexto en la raíz del repositorio** y construcción en dos etapas: la primera compila todo el reactor (incluido `tpi-common`) y la segunda copia solo el JAR del servicio sobre una imagen liviana de Java 21. Así se puede levantar desde un entorno limpio, sin JARs locales.
-- Los apuntes usan la imagen `openjdk`, que creo que está deprecada; propongo `eclipse-temurin` (los nombres de las etiquetas son **a verificar**).
-- `healthcheck` en cada contenedor y `depends_on` con condición de salud (Keycloak tarda en arrancar y `depends_on` por sí solo no espera a que esté listo, como indica el apunte 22).
+- Se usa `eclipse-temurin` en lugar de `openjdk` (deprecada).
+- `healthcheck` en cada contenedor y `depends_on` con condición de salud (Keycloak tarda en arrancar y `depends_on` por sí solo no espera a que esté listo).
 - `.dockerignore` en la raíz.
-- Logging con rotación (`json-file`, tamaño y cantidad de archivos limitados), como en el apunte 24.
+- Logging con rotación (`json-file`, tamaño y cantidad de archivos limitados).
 
 ---
 
 ## 14. Documentación de las APIs
 
-- Cada servicio expone OpenAPI/Swagger (springdoc, como en la guía de la cátedra) en `/swagger-ui.html` y `/v3/api-docs`.
+- Cada servicio expone OpenAPI/Swagger (springdoc) en `/swagger-ui.html` y `/v3/api-docs`.
 - Se accede directamente por el puerto del servicio en desarrollo. Esas rutas están permitidas sin token solo en el perfil de desarrollo.
 - La documentación debe coincidir con lo implementado.
 

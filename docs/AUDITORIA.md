@@ -38,11 +38,11 @@ docker compose exec postgres psql -U animales_user -d tpi -c "select count(*) fr
 ```
 El último comando debe fallar con *permission denied* (aislamiento entre esquemas).
 
-## E.2 Matriz de requisitos obligatorios (enunciado)
+## E.2 Matriz de requisitos técnicos
 
 | ID | Requisito | Criterio rúbrica | Evidencia en código | Prueba | Estado | Acción |
 |---|---|---|---|---|---|---|
-| RC-01 | C1 y C2 que reflejen lo implementado | ARQ-01 | `docs/diagramas/C1-Contexto.puml`, `C2-Contenedores.puml` | revisión contra `docker-compose.yml` | CV (estático) | renderizar a PNG para la defensa |
+| RC-01 | C1 y C2 que reflejen lo implementado | ARQ-01 | `docs/diagramas/C1-Contexto.puml`, `C2-Contenedores.puml` | revisión contra `docker-compose.yml` | CV (estático) | diagramas renderizados en SVG |
 | RC-02 | Microservicios + API Gateway como entrada | ARQ-01 | `gateway/`, rutas en `application.yml` | `GatewaySecurityTest`, prueba de humo | CV | — |
 | RC-03 | ≥ 2 servicios con responsabilidades coherentes | ARQ-01 | `Animal`/`EstadoAnimal`, `Solicitud`, `Donacion` | `AnimalTest`, `SolicitudTest` | CV | — |
 | RC-04 | Proceso con colaboración real y manejo de fallas | INT-01 | `SolicitudService`, `AnimalesClient` | `FlujoAdopcionIntegrationTest`, `AnimalesClientTest`, prueba de humo, caída de Animales | CV | — |
@@ -88,5 +88,4 @@ Estos cambios deben comunicarse al equipo docente (criterio “evolución del al
 | Probar Mercado Pago con la cuenta vendedora de prueba | Integrante 3 | `MP_ACCESS_TOKEN` en `.env`, pagar con la compradora de prueba (titular APRO) |
 | Verificar aislamiento de esquemas | Integrante 2 | `psql` cruzado debe fallar |
 | Renderizar C1/C2 | Integrante 2 | PlantUML |
-| Ejecutar las pruebas con JDK 21 (CI de GitLab) | Integrante 1 | primer pipeline |
-| Confirmar con la cátedra que Georef + Mercado Pago cuentan como integraciones | todos | consulta |
+| Ejecutar las pruebas con JDK 21 (CI) | Integrante 1 | primer pipeline |
