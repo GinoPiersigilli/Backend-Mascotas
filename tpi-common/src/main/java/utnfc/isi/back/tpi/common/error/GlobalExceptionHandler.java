@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.exc.InvalidFormatException;
 import com.fasterxml.jackson.databind.exc.MismatchedInputException;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 import utnfc.isi.back.tpi.common.exception.AccesoDenegadoException;
@@ -105,6 +107,36 @@ public class GlobalExceptionHandler {
                 .map(fe -> new ErrorResponse.CampoError(fe.getField(), fe.getDefaultMessage()))
                 .toList();
         log.warn("Validacion fallida en {}: {} campo(s) invalido(s)", req.getRequestURI(), campos.size());
+        return build(HttpStatus.BAD_REQUEST, "Hay datos invalidos en la solicitud", req, campos);
+    }
+
+    @ExceptionHandler(HandlerMethodValidationException.class)
+    public ResponseEntity<ErrorResponse> handleValidacionDeParametros(HandlerMethodValidationException ex,
+                                                                      HttpServletRequest req) {
+        List<ErrorResponse.CampoError> campos = ex.getParameterValidationResults().stream()
+                .flatMap(res -> {
+                    String nombre = res.getMethodParameter().getParameterName();
+                    String campo = (nombre != null && !nombre.isBlank()) ? nombre : "parametro";
+                    return res.getResolvableErrors().stream()
+                            .map(err -> new ErrorResponse.CampoError(campo, err.getDefaultMessage()));
+                })
+                .toList();
+        log.warn("Validacion de parametros fallida en {}: {} error(es)", req.getRequestURI(), campos.size());
+        return build(HttpStatus.BAD_REQUEST, "Hay datos invalidos en la solicitud", req, campos);
+    }
+
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ErrorResponse> handleConstraintViolation(ConstraintViolationException ex,
+                                                                   HttpServletRequest req) {
+        List<ErrorResponse.CampoError> campos = ex.getConstraintViolations().stream()
+                .map(cv -> {
+                    String ruta = cv.getPropertyPath() == null ? "" : cv.getPropertyPath().toString();
+                    int punto = ruta.lastIndexOf('.');
+                    String campo = punto >= 0 ? ruta.substring(punto + 1) : ruta;
+                    return new ErrorResponse.CampoError(campo, cv.getMessage());
+                })
+                .toList();
+        log.warn("Restriccion de validacion incumplida en {}: {} error(es)", req.getRequestURI(), campos.size());
         return build(HttpStatus.BAD_REQUEST, "Hay datos invalidos en la solicitud", req, campos);
     }
 

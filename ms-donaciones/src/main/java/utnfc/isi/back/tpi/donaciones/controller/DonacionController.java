@@ -1,9 +1,18 @@
 package utnfc.isi.back.tpi.donaciones.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.headers.Header;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.PositiveOrZero;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -11,6 +20,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 import utnfc.isi.back.tpi.common.security.Roles;
@@ -46,9 +56,19 @@ public class DonacionController {
     }
 
     @GetMapping
-    @Operation(summary = "Lista las donaciones propias (ADOPTANTE) o todas (COORDINADOR)")
-    public List<DonacionResponse> listar(JwtAuthenticationToken auth) {
-        return service.listar(auth.getToken().getSubject(), esCoordinador(auth));
+    @Operation(summary = "Lista paginada de donaciones propias (ADOPTANTE) o todas (COORDINADOR)")
+    @ApiResponse(responseCode = "200", description = "Lista de donaciones; el encabezado X-Total-Count informa el total",
+            headers = @Header(name = "X-Total-Count", description = "Cantidad total de registros", schema = @Schema(type = "integer")))
+    @ApiResponse(responseCode = "400", description = "Parametros de paginacion invalidos")
+    public ResponseEntity<List<DonacionResponse>> listar(
+            JwtAuthenticationToken auth,
+            @Parameter(description = "Numero de pagina (base 0)") @RequestParam(defaultValue = "0") @PositiveOrZero int page,
+            @Parameter(description = "Cantidad de elementos por pagina (1 a 100)") @RequestParam(defaultValue = "50") @Min(1) @Max(100) int size) {
+        Page<DonacionResponse> pagina = service.listar(auth.getToken().getSubject(), esCoordinador(auth),
+                PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "id")));
+        return ResponseEntity.ok()
+                .header("X-Total-Count", String.valueOf(pagina.getTotalElements()))
+                .body(pagina.getContent());
     }
 
     @GetMapping("/total")

@@ -1,7 +1,13 @@
 package utnfc.isi.back.tpi.common.error;
 
+import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Valid;
+import jakarta.validation.Validation;
+import jakarta.validation.Validator;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.PositiveOrZero;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
@@ -11,6 +17,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import utnfc.isi.back.tpi.common.exception.AccesoDenegadoException;
 import utnfc.isi.back.tpi.common.exception.ConflictoException;
@@ -45,6 +52,18 @@ class GlobalExceptionHandlerTest {
         @PostMapping("/validar")
         String validar(@Valid @RequestBody Cuerpo cuerpo) {
             return "ok";
+        }
+
+        @GetMapping("/paginado")
+        String paginado(@RequestParam(defaultValue = "0") @PositiveOrZero int page,
+                        @RequestParam(defaultValue = "50") @Min(1) @Max(100) int size) {
+            return "ok";
+        }
+
+        @GetMapping("/constraint")
+        String constraint() {
+            Validator validator = Validation.buildDefaultValidatorFactory().getValidator();
+            throw new ConstraintViolationException(validator.validate(new Cuerpo("", null)));
         }
     }
 
@@ -111,5 +130,27 @@ class GlobalExceptionHandlerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errores[0].campo").value("categoria"))
                 .andExpect(jsonPath("$.errores[0].mensaje").value(org.hamcrest.Matchers.containsString("A, B")));
+    }
+
+    @Test
+    void validacionDeParametrosDevuelve400ConFormatoUnico() throws Exception {
+        mvc.perform(get("/paginado").param("size", "101"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.errores[0].campo").value("size"));
+
+        mvc.perform(get("/paginado").param("page", "-1"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.errores[0].campo").value("page"));
+    }
+
+    @Test
+    void constraintViolationDevuelve400ConListaDeCampos() throws Exception {
+        mvc.perform(get("/constraint"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.errores[0].campo").value("nombre"))
+                .andExpect(jsonPath("$.errores[0].mensaje").value("es obligatorio"));
     }
 }

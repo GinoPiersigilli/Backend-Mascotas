@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -69,7 +70,8 @@ class AnimalControllerSecurityTest {
 
     @Test
     void adoptantePuedeConsultarElCatalogo() throws Exception {
-        when(service.listar(null, null)).thenReturn(List.of(luna(EstadoAnimal.DISPONIBLE)));
+        when(service.listar(eq(null), eq(null), any()))
+                .thenReturn(new PageImpl<>(List.of(luna(EstadoAnimal.DISPONIBLE))));
 
         mvc.perform(get("/api/animales").with(con("ADOPTANTE")))
                 .andExpect(status().isOk())

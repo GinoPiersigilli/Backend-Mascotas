@@ -21,6 +21,7 @@ compromiso de alcance, comunicarse al equipo docente.
 | 8 | Tarea programada: solo R-09 (vencimiento de entrega). La extensión del plazo “una vez” no se implementa | Pendiente §15.4 y riesgo del dominio | 15 |
 | 9 | Variables nuevas: `DEMO_USERS_PASSWORD`, `MP_USAR_SANDBOX_INIT_POINT`, `ANIMALES_DATOS_DEMO`, `SWAGGER_ENABLED` | Realm sin secretos versionados; demo reproducible | 11 |
 | 10 | Control final desfavorable exige observaciones (400 si faltan) | Trazabilidad del motivo de la reversión | 7 |
+| 11 | Paginación opcional (`page=0`, `size=50`, máx. `100`) y encabezado `X-Total-Count` en `GET /api/animales`, `GET /api/solicitudes` y `GET /api/donaciones` (cambio aditivo: el cuerpo sigue siendo un arreglo JSON) | Evitar lecturas sin cota manteniendo compatibilidad total con clientes existentes | 6, 7, 8 |
 
 ---
 
@@ -167,7 +168,7 @@ Los servicios usan el manejador global del JAR (`@RestControllerAdvice`). Un ser
 | Método y ruta | Rol | Cuerpo | Respuesta |
 |---|---|---|---|
 | `POST /api/animales` | COORDINADOR | `AnimalRequest` | 201 `AnimalResponse` |
-| `GET /api/animales?estado=&especie=` | Cualquier autenticado | — | 200 lista de `AnimalResponse` |
+| `GET /api/animales?estado=&especie=&page=0&size=50` | Cualquier autenticado | — | 200 lista de `AnimalResponse` + header `X-Total-Count` (orden `id ASC`; `page >= 0`, `1 <= size <= 100`) |
 | `GET /api/animales/{id}` | Cualquier autenticado | — | 200 `AnimalResponse` / 404 |
 | `PUT /api/animales/{id}` | COORDINADOR | `AnimalRequest` | 200 `AnimalResponse` |
 | `POST /api/animales/{id}/marcar-no-disponible` | COORDINADOR | `{ "motivo": "..." }` | 200 / 409 si está RESERVADO o EN_ADAPTACION (R-13) |
@@ -219,7 +220,7 @@ Cualquier otra transición devuelve 409. Si el Coordinador quiere dejar al anima
 | `PUT /api/adoptantes/me/perfil` | ADOPTANTE | `PerfilRequest` | 200 `PerfilResponse` |
 | `GET /api/adoptantes/me/perfil` | ADOPTANTE | — | 200 / 404 si no lo completó |
 | `POST /api/solicitudes` | ADOPTANTE | `{ "animalId": 7 }` | 201 `SolicitudResponse`. 409 por R-01, R-02, R-03 o R-04. 503 si Animales no responde |
-| `GET /api/solicitudes?estado=` | ADOPTANTE (las suyas) / COORDINADOR (todas) | — | 200 lista |
+| `GET /api/solicitudes?estado=&page=0&size=50` | ADOPTANTE (las suyas) / COORDINADOR (todas) | — | 200 lista + header `X-Total-Count` (orden `id DESC`; `page >= 0`, `1 <= size <= 100`) |
 | `GET /api/solicitudes/{id}` | Dueño o COORDINADOR | — | 200 / 403 / 404 |
 | `POST /api/solicitudes/{id}/cancelar` | ADOPTANTE dueño | — | 200 / 409 si no está PENDIENTE |
 | `POST /api/solicitudes/{id}/aprobar` | COORDINADOR | `{ "justificacion": "..." }` | 200 / 409. La justificación es obligatoria si `requiereExcepcion` es verdadero (R-08) |
@@ -246,7 +247,7 @@ Endpoints agregados en v2: `GET /api/solicitudes/{id}/historial` (dueño o COORD
 | Método y ruta | Rol | Cuerpo | Respuesta y errores |
 |---|---|---|---|
 | `POST /api/donaciones` | ADOPTANTE | `{ "monto": 500 }` | 201 `DonacionResponse` con `linkPago`. 400 si el monto es menor al mínimo (D-01). 503 si el proveedor no responde |
-| `GET /api/donaciones` | ADOPTANTE (las suyas) / COORDINADOR (todas) | — | 200 lista |
+| `GET /api/donaciones?page=0&size=50` | ADOPTANTE (las suyas) / COORDINADOR (todas) | — | 200 lista + header `X-Total-Count` (orden `id DESC`; `page >= 0`, `1 <= size <= 100`) |
 | `GET /api/donaciones/{id}` | Dueño o COORDINADOR | — | 200 / 403 / 404. Si está PENDIENTE, consulta al proveedor y actualiza el estado |
 | `GET /api/donaciones/total` | COORDINADOR | — | 200 `{ "totalConfirmado": 1500, "cantidad": 3 }` |
 

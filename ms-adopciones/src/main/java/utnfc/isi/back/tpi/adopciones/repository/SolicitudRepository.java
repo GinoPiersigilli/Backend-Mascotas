@@ -1,5 +1,7 @@
 package utnfc.isi.back.tpi.adopciones.repository;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import utnfc.isi.back.tpi.adopciones.model.EstadoSolicitud;
 import utnfc.isi.back.tpi.adopciones.model.Solicitud;
@@ -23,6 +25,12 @@ public interface SolicitudRepository extends JpaRepository<Solicitud, Long> {
     List<Solicitud> findAllByOrderByIdDesc();
 
     List<Solicitud> findByEstadoOrderByIdDesc(EstadoSolicitud estado);
+
+    Page<Solicitud> findByAdoptanteId(String adoptanteId, Pageable pageable);
+
+    Page<Solicitud> findByAdoptanteIdAndEstado(String adoptanteId, EstadoSolicitud estado, Pageable pageable);
+
+    Page<Solicitud> findByEstado(EstadoSolicitud estado, Pageable pageable);
 
     /** Candidatas a vencimiento de plazo de entrega (R-09), para la tarea programada. */
     List<Solicitud> findByEstadoAndFechaAprobacionBefore(EstadoSolicitud estado, LocalDateTime limite);

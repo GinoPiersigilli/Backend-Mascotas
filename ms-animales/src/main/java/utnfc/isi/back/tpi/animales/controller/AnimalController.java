@@ -1,9 +1,18 @@
 package utnfc.isi.back.tpi.animales.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.headers.Header;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.PositiveOrZero;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -51,10 +60,20 @@ public class AnimalController {
     }
 
     @GetMapping
-    @Operation(summary = "Lista animales, con filtros opcionales por estado y especie")
-    public List<AnimalResponse> listar(@RequestParam(required = false) EstadoAnimal estado,
-                                       @RequestParam(required = false) Especie especie) {
-        return service.listar(estado, especie);
+    @Operation(summary = "Lista animales paginados, con filtros opcionales por estado y especie")
+    @ApiResponse(responseCode = "200", description = "Lista de animales; el encabezado X-Total-Count informa el total",
+            headers = @Header(name = "X-Total-Count", description = "Cantidad total de registros", schema = @Schema(type = "integer")))
+    @ApiResponse(responseCode = "400", description = "Parametros de filtro o paginacion invalidos")
+    public ResponseEntity<List<AnimalResponse>> listar(
+            @RequestParam(required = false) EstadoAnimal estado,
+            @RequestParam(required = false) Especie especie,
+            @Parameter(description = "Numero de pagina (base 0)") @RequestParam(defaultValue = "0") @PositiveOrZero int page,
+            @Parameter(description = "Cantidad de elementos por pagina (1 a 100)") @RequestParam(defaultValue = "50") @Min(1) @Max(100) int size) {
+        Page<AnimalResponse> pagina = service.listar(estado, especie,
+                PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "id")));
+        return ResponseEntity.ok()
+                .header("X-Total-Count", String.valueOf(pagina.getTotalElements()))
+                .body(pagina.getContent());
     }
 
     @GetMapping("/{id}")
