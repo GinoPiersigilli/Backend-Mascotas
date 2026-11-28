@@ -1,17 +1,47 @@
-# Registro de decisiones arquitectónicas (ADR)
+# Registro de Decisiones Arquitectónicas (ADR)
 
-Formato: contexto → alternativas → decisión → consecuencias → evidencia. Estado de todas: **aceptada**
-(sujeta a revisión del equipo en un Merge Request).
+Formato: contexto → alternativas → decisión → consecuencias → evidencia verificable en el código.
+
+## Índice de ADRs
+
+| ID | Decisión | Estado | Fecha |
+|---|---|---|---|
+| [ADR-01](#adr-01-tres-servicios-separados-por-dueño-de-la-información) | Tres microservicios separados por dueño de la información (`ms-animales`, `ms-adopciones`, `ms-donaciones`) | Aceptado | 2026-10 |
+| [ADR-02](#adr-02-comunicación-síncrona-rest-con-api-interna) | Comunicación síncrona REST hacia API interna `/internal/animales/**` | Aceptado | 2026-10 |
+| [ADR-03](#adr-03-animales-decide-la-validez-de-cada-transición) | `ms-animales` valida y gobierna cada transición de estado del animal | Aceptado | 2026-10 |
+| [ADR-04](#adr-04-seguridad-en-dos-capas-y-token-de-servicio-trusted-zone) | Seguridad en dos capas (Gateway + servicios) y token `client_credentials` (`ROLE_SERVICIO`) | Aceptado | 2026-10 |
+| [ADR-05](#adr-05-emisor-del-token-fijo-con-kc_hostname) | Emisor JWT público fijo (`KC_HOSTNAME`) con descarga interna de JWKS | Aceptado | 2026-10 |
+| [ADR-06](#adr-06-consistencia-entre-servicios-sin-transacción-distribuida) | Consistencia entre servicios con `flush` local previo, *rollback* ante fallo remoto y reconciliación | Aceptado (ampliado por ADR-21) | 2026-10 |
+| [ADR-07](#adr-07-concurrencia-columnas-de-bloqueo-con-unique--bloqueo-optimista) | Control de concurrencia con columnas `UNIQUE` condicionales y bloqueo optimista `@Version` | Aceptado | 2026-10 |
+| [ADR-08](#adr-08-persistencia-una-instancia-esquema-y-usuario-por-servicio-keycloak-aparte) | Persistencia aislada por esquema y usuario PostgreSQL; base independiente para Keycloak | Aceptado (evolucionado por ADR-26) | 2026-10 |
+| [ADR-09](#adr-09-componente-común-qué-se-comparte-y-qué-no) | Librería común liviana (`tpi-common`) sin acoplar modelos ni al Gateway reactivo | Aceptado | 2026-10 |
+| [ADR-10](#adr-10-georef-como-fuente-de-ubicación-y-distancia-en-línea-recta) | Geolocalización con API Georef + distancia Haversine con degradación no bloqueante | Aceptado | 2026-10 |
+| [ADR-11](#adr-11-mercado-pago-checkout-pro-con-webhook-firmado-reconciliación-periódica-y-verificación-bajo-demanda) | Integración Mercado Pago Checkout Pro con webhook HMAC-SHA256, reconciliación y consulta | Aceptado (ampliado por ADR-21) | 2026-11 |
+| [ADR-12](#adr-12-sin-lombok-records-para-dto) | Prohibición de Lombok; `record` de Java 21 para DTOs y propiedades tipadas | Aceptado | 2026-10 |
+| [ADR-13](#adr-13-estrategia-de-pruebas-en-tres-niveles-unidadslice-testcontainers-y-e2e) | Estrategia de pruebas en tres niveles: unidad/slice, Testcontainers PostgreSQL 17 y E2E Compose | Aceptado | 2026-11 |
+| [ADR-14](#adr-14-docker-construcción-multi-stage-con-caché-buildkit-y-usuario-sin-privilegios) | Construcción Docker multi-stage con caché BuildKit, usuario no root y healthchecks nativos | Aceptado (ampliado por ADR-25) | 2026-11 |
+| [ADR-15](#adr-15-renovación-de-token-de-servicio-con-reentrantlock-y-precalentamiento-fuera-de-la-transacción) | Caché `volatile` + `ReentrantLock` en `ServiceTokenProvider` y precalentamiento fuera de transacción | Aceptado | 2026-11 |
+| [ADR-16](#adr-16-timeouts-diferenciados-y-circuit-breaker-resilience4j-en-clientes-http) | Timeouts diferenciados y Circuit Breaker programático (Resilience4j) en clientes HTTP | Aceptado | 2026-11 |
+| [ADR-17](#adr-17-resolución-de-la-inconsistencia-residual-del-adr-06-estado-actual-vs-outbox-vs-saga-con-compensación) | Evaluación comparativa: estado actual + reconciliación vs. Outbox vs. Saga orquestada ligera | Propuesta (referencia evolutiva) | 2026-11 |
+| [ADR-18](#adr-18-idempotencia-opcional-en-post-apidonaciones-con-idempotency-key-y-conflicto-409) | Idempotencia opcional en `POST /api/donaciones` con `Idempotency-Key` y hash SHA-256 (`409`) | Aceptado | 2026-11 |
+| [ADR-19](#adr-19-política-de-versionado-de-la-api-rest-api) | Política de evolución aditiva bajo `/api/**` y reserva de `/api/v2/**` para cambios incompatibles | Aceptado | 2026-11 |
+| [ADR-20](#adr-20-virtual-threads-reintentos-selectivos-en-get-idempotentes-transiciones-idempotentes-en-animales-y-shedlock-jdbc) | Virtual threads, `Retry` solo en GET, transiciones idempotentes con `solicitudId` y ShedLock JDBC | Aceptado | 2026-11 |
+| [ADR-21](#adr-21-cierre-de-brechas-operativas-y-hardening-del-gateway-ws-4) | Alertas de controles vencidos, webhook MP, reconciliador ADR-06, reportes, eventos y hardening Gateway | Aceptado | 2026-11 |
+| [ADR-22](#adr-22-endurecimiento-de-jwt-azpaudclock-skew-probes-actuator-y-escaneo-continuo-ws-5) | Validación estricta de JWT (`azp`/`aud`/*clock skew*), PKCE, probes Actuator y seguridad continua | Aceptado | 2026-11 |
+| [ADR-23](#adr-23-compuertas-automatizadas-de-calidad-arquitectura-y-cobertura-ws-6) | Maven Wrapper, Enforcer, Checkstyle, SpotBugs, ArchUnit y umbral bloqueante de JaCoCo | Aceptado | 2026-11 |
+| [ADR-24](#adr-24--apagado-ordenado-graceful-shutdown-y-métricas-de-negocio-en-prometheus-ws-8) | Graceful shutdown (`20s`/`30s`), contadores/gauges de negocio en Prometheus y runbook operativo | Aceptado | 2026-11 |
+| [ADR-25](#adr-25--fijación-de-imágenes-base-metadatos-oci-límites-de-recursos-y-pipeline-cicd-completo-ws-9) | Fijación de imágenes base, etiquetas OCI, límites de recursos y pipeline CI/CD completo con GHCR | Aceptado | 2026-11 |
+| [ADR-26](#adr-26--migraciones-flyway-paginación-aditiva-y-protección-interna-de-prometheus) | Migraciones Flyway + `ddl-auto: validate`, paginación aditiva (`X-Total-Count`) y `/actuator/prometheus` interno | Aceptado | 2026-11 |
 
 ---
 
 ## ADR-01. Tres servicios separados por dueño de la información
 
-- **Contexto:** RC-03 exige ≥ 2 servicios con responsabilidades coherentes, no dos CRUD.
+- **Contexto:** separar responsabilidades del dominio según propiedad de datos, invariantes y acoplamiento con proveedores externos.
 - **Alternativas:** (a) un monolito modular; (b) Animales + Adopciones (Donaciones dentro de Adopciones); (c) tres servicios; (d) un servicio por entidad (perfil, solicitud…).
 - **Decisión:** (c). Animales es dueño del estado del animal; Adopciones, del proceso; Donaciones, del ciclo de pago.
-- **Justificación:** dueños de datos distintos (el animal existe sin solicitudes), ritmos de cambio distintos, reglas distintas (Animales protege la coherencia del estado; Adopciones, la del proceso). Donaciones tiene datos, reglas y proveedor propios: cambiar de plataforma de pagos no toca a los otros. (d) multiplicaría llamadas sin reglas nuevas.
-- **Consecuencias:** Donaciones no colabora con otro servicio (punto a defender: la colaboración exigida la cubre la adopción). Animales es chico pero tiene una máquina de estados que rechaza transiciones.
+- **Justificación:** dueños de datos distintos (el animal existe sin solicitudes), ritmos de cambio distintos, reglas distintas (Animales protege la coherencia del estado; Adopciones, la del proceso). Donaciones tiene datos, reglas y proveedor propios: cambiar de plataforma de pagos no toca a los otros. (d) multiplicaría llamadas de red sin aislar invariantes reales.
+- **Consecuencias:** Donaciones opera de forma autónoma frente a Mercado Pago, mientras que la coordinación entre dominios se concentra entre `ms-adopciones` y `ms-animales`.
 - **Evidencia:** `ms-animales/.../model/Animal.java`, `EstadoAnimal.java`; `ms-adopciones/.../service/SolicitudService.java`; `ms-donaciones/.../service/DonacionService.java`.
 
 ## ADR-02. Comunicación síncrona REST con API interna
@@ -64,8 +94,8 @@ Formato: contexto → alternativas → decisión → consecuencias → evidencia
 
 - **Alternativas:** una base por servicio (más contenedores), esquemas compartidos con un solo usuario (aislamiento débil).
 - **Decisión:** base `tpi` con esquemas `animales`, `adopciones`, `donaciones`, cada uno propiedad de su usuario; Keycloak en `keycloak-db`.
-- **Consecuencias:** aislamiento real por permisos con un solo contenedor de negocio; Keycloak se recrea sin tocar datos de negocio. `ddl-auto: update` simplifica pero no versiona el esquema (mejora: Flyway).
-- **Evidencia:** `infra/postgres/init/01-esquemas.sh`, `hibernate.default_schema`.
+- **Consecuencias:** aislamiento real por permisos SQL con un solo contenedor de negocio; Keycloak se recrea sin tocar datos de negocio. La evolución de cada esquema se gestiona mediante migraciones SQL versionadas con **Flyway** y `ddl-auto: validate` (ver [ADR-26](#adr-26--migraciones-flyway-paginación-aditiva-y-protección-interna-de-prometheus)).
+- **Evidencia:** `infra/postgres/init/01-esquemas.sh`, `hibernate.default_schema`, `*/src/main/resources/db/migration/V*.sql`.
 
 ## ADR-09. Componente común: qué se comparte y qué no
 
@@ -95,14 +125,17 @@ Formato: contexto → alternativas → decisión → consecuencias → evidencia
 - **Decisión:** records para DTO y configuración; entidades con getters explícitos y métodos de dominio en lugar de setters.
 - **Consecuencia:** algo más de código, pero las entidades no exponen setters que permitan saltear las reglas.
 
-## ADR-13. Pruebas sin infraestructura externa
+## ADR-13. Estrategia de pruebas en tres niveles: unidad/slice, Testcontainers y E2E
 
-- **Decisión:** H2 en modo PostgreSQL, `MockRestServiceServer` con respuestas grabadas de Georef y documentadas de Mercado Pago, `@MockitoBean` para clientes en las pruebas de flujo, reloj inyectable (`Clock`) para plazos, `jwt()`/`mockJwt()` de Spring Security Test.
-- **Consecuencia:** CI reproducible sin Docker ni Internet; no prueban el dialecto real de PostgreSQL ni Keycloak (lo cubre la prueba de humo con Docker).
+- **Decisión:**
+  1. **Unidad y slice rápido (`@Tag("unit")` / `@Tag("integration")` en memoria):** JUnit 5, Mockito, ArchUnit (`@ArchTag("unit")`), H2 en modo PostgreSQL, `MockRestServiceServer`, servidores HTTP locales para resiliencia, `Clock` inyectable y `jwt()`/`mockJwt()`. Corre con `./mvnw verify` sin requerir Docker ni acceso a Internet.
+  2. **Integración real de persistencia (`-Pintegration-tests`, `*IT`):** Testcontainers levanta PostgreSQL 17 real, ejecuta todas las migraciones Flyway (`V1..V3`) y valida el mapeo JPA con `ddl-auto: validate`.
+  3. **End-to-End del sistema completo (`docker-compose.demo.yml` + `scripts/prueba-humo.sh`):** valida los 8 contenedores reales (Gateway, 3 microservicios, Keycloak, 2 PostgreSQL y WireMock) recorriendo P1–P5, RBAC, IDOR, `Idempotency-Key` y propagación de `X-Correlation-ID`.
+- **Consecuencia:** feedback rápido en desarrollo local (`-Dgroups=unit` en ~1 min) sin renunciar a validación real de dialecto SQL, migraciones, contenedores y OIDC en CI.
 
-## ADR-14. Docker: construcción en dos etapas desde la raíz
+## ADR-14. Docker: construcción multi-stage con caché BuildKit y usuario sin privilegios
 
-- **Decisión:** cada Dockerfile instala POM padre y `tpi-common` en el `.m2` de la imagen y compila el servicio; imagen final `eclipse-temurin:21-jre`. Healthchecks sin `curl` (bash `/dev/tcp`); `depends_on` con `service_healthy`; logging con rotación.
+- **Decisión:** cada Dockerfile construye desde la raíz del reactor cacheando dependencias con `--mount=type=cache,target=/root/.m2`, ejecuta el runtime sobre JRE 21 mínimo con usuario sin privilegios (`USER app`), `SWAGGER_ENABLED=false` por defecto, healthchecks nativos con bash `/dev/tcp`, `depends_on` con `service_healthy` y rotación de logs JSON (ampliado en [ADR-25](#adr-25--fijación-de-imágenes-base-metadatos-oci-límites-de-recursos-y-pipeline-cicd-completo-ws-9)).
 
 ## ADR-15. Renovación de token de servicio con `ReentrantLock` y precalentamiento fuera de la transacción
 
@@ -243,3 +276,11 @@ Formato: contexto → alternativas → decisión → consecuencias → evidencia
   - Restringir Dependabot (`.github/dependabot.yml`) para ignorar saltos *major* fuera de contrato (Java > 21, Spring Boot > 3.5).
   - Estructurar `.github/workflows/ci.yml` con permisos mínimos (`contents: read`), cancelación concurrente solo en PRs, `./mvnw` con reintentos de red y caché Maven con `restore-keys`, cuatro jobs (`verify` con tabla JaCoCo en Step Summary, `integration-tests` con PostgreSQL 17 Testcontainers, `e2e-demo` con Docker Compose + Keycloak + WireMock + `prueba-humo.sh`, y `publish-release` en tags `v*` publicando las 4 imágenes en `ghcr.io` y el GitHub Release con los contratos OpenAPI).
 - **Evidencia:** `*/Dockerfile`, `.dockerignore`, `docker-compose.yml`, `docker-compose.demo.yml`, `.github/workflows/ci.yml`, `.github/workflows/security.yml`, `.github/dependabot.yml`.
+
+## ADR-26 — Migraciones Flyway, paginación aditiva y protección interna de Prometheus
+- **Contexto:** consolidación de tres decisiones estructurales aplicadas sobre la base inicial: (1) el uso de `ddl-auto: update` no versionaba cambios de esquema ni índices; (2) los listados `GET` sin límite exponían a lecturas descontroladas, pero envolver la respuesta en un objeto `Page` habría roto clientes existentes (`CONTRATOS.md`); (3) exponer métricas de negocio y JVM sin autenticación filtraría información operativa sensible.
+- **Decisión:**
+  - **Flyway + `ddl-auto: validate`:** cada microservicio versiona su propio esquema (`animales`, `adopciones`, `donaciones`) en `src/main/resources/db/migration/V*.sql` incluyendo índices compuestos y tablas `shedlock`, validado automáticamente contra PostgreSQL 17 real en `FlywayMigrationIT`.
+  - **Paginación aditiva (`page=0`, `size=50`, máx. `100` + `X-Total-Count`):** los listados paginan en SQL (`LIMIT`/`OFFSET` combinados con `@BatchSize(50)` para evitar `HHH90003004` y N+1), conservando un arreglo JSON como cuerpo y publicando el total en la cabecera `X-Total-Count`.
+  - **Prometheus interno con `ROLE_SERVICIO`:** `/actuator/prometheus` no se enruta en el API Gateway y exige un JWT con rol `SERVICIO` en cada microservicio (`401`/`403` verificados en `*MetricasTest`).
+- **Evidencia:** `*/src/main/resources/db/migration/V*.sql`, `*FlywayMigrationIT.java`, `*PaginacionTest.java`, `SolicitudListarQueryCountTest.java`, `*MetricasTest.java`, `docs/rendimiento.md`.

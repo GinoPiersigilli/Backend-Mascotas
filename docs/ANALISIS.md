@@ -1,6 +1,6 @@
-# Bloque A — Análisis, alcance y decisiones
+# Análisis de Dominio, Alcance y Trazabilidad
 
-## A.1 Fuentes y prioridad aplicada
+## 1. Fuentes de diseño y prioridad aplicada
 
 | Prioridad | Fuente | Uso |
 |---|---|---|
@@ -36,16 +36,16 @@ documento de dominio ya las descarta (clave paga y despliegue local, respectivam
 | CE-P1 | Gestión de animales y disponibilidad con máquina de estados | Dominio §5 P1, R-13 |
 | CE-P2 | Presentación y evaluación (disponibilidad, duplicados, compatibilidad, distancia) y decisión humana | Dominio P2, R-01..R-08 |
 | CE-P3 | Entrega con plazo | P3, R-09, R-10 |
-| CE-P4 | Adaptación, control final, devolución, reversión | P4, R-11, R-12 |
-| CE-P5 | Donaciones con Mercado Pago, sin webhooks | P5, D-01..D-04 |
-| CE-T1 | Tarea programada para plazos vencidos | Dominio §10.2 |
-| CE-S1 | Doble validación del JWT (Gateway y servicios), API interna no publicada, token de servicio | Dominio §10.8 |
-| CE-D1 | PostgreSQL con esquema y credenciales por servicio; Keycloak con base propia | Dominio §10.7 |
-| CE-O1 | Correlación `X-Correlation-ID` y logs por servicio | CONTRATOS §5 |
+| CE-P4 | Adaptación, control final, alertas de controles vencidos, devolución, reversión | P4, R-11, R-12 |
+| CE-P5 | Donaciones con Mercado Pago (idempotencia, webhook firmado HMAC-SHA256, reconciliación periódica y verificación bajo demanda) | P5, D-01..D-04, ADR-11 |
+| CE-T1 | Tareas programadas coordinadas con ShedLock sobre JDBC (vencimientos, controles, reconciliación) | Dominio §10.2, ADR-20, ADR-21 |
+| CE-S1 | Doble validación estricta del JWT (Gateway y servicios), API interna no publicada, token de servicio | Dominio §10.8, ADR-04, ADR-22 |
+| CE-D1 | PostgreSQL 17 con esquema, migraciones Flyway y credenciales por servicio; Keycloak con base propia | Dominio §10.7, ADR-08, ADR-26 |
+| CE-O1 | Correlación `X-Correlation-ID`, métricas Prometheus internas y logs estructurados por servicio | CONTRATOS §5, ADR-24 |
 
-La matriz completa con estado y evidencia está en [AUDITORIA.md](AUDITORIA.md).
+El detalle arquitectónico y las decisiones asociadas se documentan en [ARQUITECTURA.md](ARQUITECTURA.md) y [ADR.md](ADR.md).
 
-## A.4 Problema, MVP y proceso central
+## 4. Problema, alcance funcional y proceso central
 
 **Necesidad:** que cada animal encuentre un hogar adecuado aplicando reglas consistentes y dejando
 traza, y saber qué donaciones se acreditaron.

@@ -34,7 +34,7 @@ opcionales de paginación `page` (por defecto `0`, `>= 0`) y `size` (por defecto
 | `POST /api/animales/{id}/marcar-no-disponible` | COORDINADOR | `{"motivo"}` | 200, 400, 404, 409 (R-13 o no DISPONIBLE) |
 | `POST /api/animales/{id}/marcar-disponible` | COORDINADOR | — | 200, 404, 409 |
 | `GET /internal/animales/{id}` | SERVICIO (no publicada) | — | 200, 404 |
-| `PUT /internal/animales/{id}/estado` | SERVICIO (no publicada) | `{"nuevoEstado"}` | 200, 400, 404, 409 transición inválida |
+| `PUT /internal/animales/{id}/estado` | SERVICIO (no publicada) | `{"nuevoEstado","solicitudId"}` (`solicitudId` opcional, idempotente) | 200, 400, 404, 409 transición inválida |
 
 `AnimalRequest`: `nombre` (obligatorio, ≤100), `especie` (`PERRO|GATO|OTRO`), `edadMeses` (0–400),
 `tamanio` (`PEQUENIO|MEDIANO|GRANDE`), `necesidadesEspeciales` (opcional), `aptoNinios`,
@@ -108,7 +108,7 @@ Mercado Pago requiere una URL HTTPS pública para enviar notificaciones reales. 
 
 ## Especificaciones OpenAPI exportadas
 
-Las especificaciones OpenAPI 3 de cada servicio se versionan y verifican en el build (`mvn -B test -Pexport-openapi -Dtest=OpenApiExportTest`):
+Las especificaciones OpenAPI 3 de cada servicio se versionan y verifican en el build (`./mvnw -B test -Pexport-openapi -Dtest=OpenApiExportTest`):
 - [docs/openapi/ms-animales.json](openapi/ms-animales.json)
 - [docs/openapi/ms-adopciones.json](openapi/ms-adopciones.json)
 - [docs/openapi/ms-donaciones.json](openapi/ms-donaciones.json)

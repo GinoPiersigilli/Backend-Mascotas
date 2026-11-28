@@ -6,8 +6,7 @@ Lo marcado como **(a verificar)** no fue confirmado en documentación oficial y 
 
 ## 0. Versión 2 — cambios incorporados durante la implementación
 
-Estos cambios deben revisarse en un Merge Request con las personas afectadas y, si alteran el
-compromiso de alcance, comunicarse al equipo docente.
+Registro de evoluciones aditivas y ajustes técnicos acordados sobre la versión inicial del contrato:
 
 | # | Cambio | Motivo | Sección |
 |---|---|---|---|
@@ -22,6 +21,9 @@ compromiso de alcance, comunicarse al equipo docente.
 | 9 | Variables nuevas: `DEMO_USERS_PASSWORD`, `MP_USAR_SANDBOX_INIT_POINT`, `ANIMALES_DATOS_DEMO`, `SWAGGER_ENABLED` | Realm sin secretos versionados; demo reproducible | 11 |
 | 10 | Control final desfavorable exige observaciones (400 si faltan) | Trazabilidad del motivo de la reversión | 7 |
 | 11 | Paginación opcional (`page=0`, `size=50`, máx. `100`) y encabezado `X-Total-Count` en `GET /api/animales`, `GET /api/solicitudes` y `GET /api/donaciones` (cambio aditivo: el cuerpo sigue siendo un arreglo JSON) | Evitar lecturas sin cota manteniendo compatibilidad total con clientes existentes | 6, 7, 8 |
+| 12 | Migraciones versionadas con **Flyway** (`db/migration/V*.sql`) y `ddl-auto: validate` en ejecución, verificadas contra PostgreSQL 17 con Testcontainers | Versionado reproducible del esquema sin mutaciones implícitas de Hibernate | 10 |
+| 13 | Encabezado opcional `Idempotency-Key` en `POST /api/donaciones` (`409` si se reutiliza con distinto monto) y `solicitudId` opcional en `PUT /internal/animales/{id}/estado` | Reintentos seguros sin duplicar preferencias de pago ni fallar en transiciones repetidas | 6, 8 |
+| 14 | Endpoints operativos aditivos: `POST /api/donaciones/webhooks/mercadopago` (firma HMAC-SHA256 `x-signature`), `GET /api/solicitudes/reportes` y `POST /api/solicitudes/reconciliacion` (`COORDINADOR`), filtro `?controlVencido=true` | Confirmación asíncrona de pagos, reconciliación de ADR-06 y visibilidad operativa | 7, 8 |
 
 ---
 
@@ -286,7 +288,7 @@ Endpoints agregados en v2: `GET /api/solicitudes/{id}/historial` (dueño o COORD
 | Usuarios | Uno por esquema (`animales_user`, `adopciones_user`, `donaciones_user`), con permisos solo sobre su esquema. Se crean con un script de inicialización |
 | Keycloak | Contenedor `keycloak-db` propio |
 | Volúmenes | Nombrados y descriptivos (`tpi-postgres-data`, `tpi-keycloak-db-data`) |
-| Esquema de tablas | `ddl-auto: update` de JPA (propuesta, por simplicidad; no se usan migraciones) |
+| Esquema de tablas | Migraciones SQL versionadas con **Flyway** (`src/main/resources/db/migration/V*.sql`) y `spring.jpa.hibernate.ddl-auto: validate` en ejecución |
 | Regla | Ningún servicio accede a las tablas de otro. Para saber el estado de un animal, Adopciones lo consulta por la API interna |
 | Unicidad (R-01) | Restricción en la base de Adopciones: una sola solicitud PENDIENTE por animal y una sola activa por adoptante |
 
