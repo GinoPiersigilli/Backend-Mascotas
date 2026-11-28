@@ -9,7 +9,7 @@ labels: bug
 <!-- Qué ocurrió frente a qué debía ocurrir según el contrato -->
 
 ## Servicio / módulo afectado
-<!-- gateway | ms-animales | ms-adopciones | ms-donaciones | tpi-common | docker/ci -->
+<!-- gateway | ms-animales | ms-adopciones | ms-donaciones | common | docker/ci -->
 
 ## Pasos para reproducir
 1. 

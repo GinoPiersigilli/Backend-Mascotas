@@ -6,17 +6,17 @@ ENV MAVEN_ARGS="-Daether.connector.http.retryHandler.count=5 -Daether.connector.
 
 # 1) Copiar solo los POMs del reactor para cachear la capa de dependencias
 COPY pom.xml .
-COPY tpi-common/pom.xml tpi-common/
+COPY common/pom.xml common/
 COPY ms-animales/pom.xml ms-animales/
 COPY ms-adopciones/pom.xml ms-adopciones/
 COPY ms-donaciones/pom.xml ms-donaciones/
 COPY gateway/pom.xml gateway/
 COPY coverage-report/pom.xml coverage-report/
 RUN --mount=type=cache,target=/root/.m2 \
-    mvn -B -q -pl ms-adopciones -am dependency:go-offline -DexcludeGroupIds=utnfc.isi.back.tpi
+    mvn -B -q -pl ms-adopciones -am dependency:go-offline -DexcludeGroupIds=ar.org.refugio
 
-# 2) Copiar unicamente tpi-common y el codigo fuente del servicio y empaquetar
-COPY tpi-common/src tpi-common/src
+# 2) Copiar unicamente common y el codigo fuente del servicio y empaquetar
+COPY common/src common/src
 COPY ms-adopciones/src ms-adopciones/src
 RUN --mount=type=cache,target=/root/.m2 \
     mvn -B -q -pl ms-adopciones -am package -DskipTests

@@ -1,0 +1,311 @@
+package ar.org.refugio.donaciones.service;
+
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
+import ar.org.refugio.common.exception.AccesoDenegadoException;
+import ar.org.refugio.common.exception.ConflictoException;
+import ar.org.refugio.common.exception.RecursoNoEncontradoException;
+import ar.org.refugio.common.exception.ServicioNoDisponibleException;
+import ar.org.refugio.donaciones.client.MercadoPagoClient;
+import ar.org.refugio.donaciones.config.DonacionesProperties;
+import ar.org.refugio.donaciones.dto.DonacionDtos.DonacionResponse;
+import ar.org.refugio.donaciones.dto.DonacionDtos.TotalResponse;
+import ar.org.refugio.donaciones.model.Donacion;
+import ar.org.refugio.donaciones.model.EstadoDonacion;
+import ar.org.refugio.donaciones.repository.DonacionRepository;
+
+import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Clock;
+import java.time.LocalDateTime;
+import java.util.HexFormat;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
+
+/**
+ * Proceso P5: recepcion de donaciones (reglas D-01 a D-04).
+ * Las llamadas a Mercado Pago se hacen fuera de las transacciones de base de
+ * datos.
+ */
+@Service
+public class DonacionService {
+
+    private static final Logger log = LoggerFactory.getLogger(DonacionService.class);
+
+    private final DonacionRepository repository;
+    private final MercadoPagoClient mercadoPago;
+    private final DonacionesProperties props;
+    private final TransactionTemplate tx;
+    private final TransactionTemplate txReadOnly;
+    private final Clock clock;
+    private final Counter donacionesCreadas;
+    private final Counter donacionesConfirmadas;
+
+    public DonacionService(DonacionRepository repository, MercadoPagoClient mercadoPago, DonacionesProperties props,
+            PlatformTransactionManager transactionManager, Clock clock, MeterRegistry meterRegistry) {
+        this.repository = repository;
+        this.mercadoPago = mercadoPago;
+        this.props = props;
+        this.tx = new TransactionTemplate(transactionManager);
+        this.txReadOnly = new TransactionTemplate(transactionManager);
+        this.txReadOnly.setReadOnly(true);
+        this.clock = clock;
+        this.donacionesCreadas = Counter.builder("donaciones.creadas")
+                .description("Total de donaciones creadas en estado PENDIENTE")
+                .register(meterRegistry);
+        this.donacionesConfirmadas = Counter.builder("donaciones.confirmadas")
+                .description("Total de donaciones confirmadas con pago aprobado")
+                .register(meterRegistry);
+    }
+
+    /**
+     * D-01 y creacion del cobro. Si Mercado Pago falla, la excepcion (503) se
+     * propaga ANTES de
+     * guardar: no queda ninguna donacion registrada sin enlace de pago.
+     */
+    public DonacionResponse crear(String donanteId, BigDecimal monto) {
+        return crear(donanteId, monto, null);
+    }
+
+    /**
+     * Crea una donacion con soporte opcional de {@code Idempotency-Key} acotada por
+     * donante (ADR-18):
+     * misma clave + mismo monto devuelve la donacion existente sin cobrar dos
+     * veces; misma clave +
+     * monto distinto responde 409 Conflict.
+     */
+    public DonacionResponse crear(String donanteId, BigDecimal monto, String idempotencyKey) {
+        Donacion.validarMonto(monto, props.montoMinimo());
+        String clave = (idempotencyKey == null || idempotencyKey.isBlank()) ? null : idempotencyKey.trim();
+        String hash = clave == null ? null : hashSolicitud(monto);
+
+        if (clave != null) {
+            Optional<Donacion> existente = Objects.requireNonNull(txReadOnly.execute(
+                    st -> repository.findByDonanteIdAndIdempotencyKey(donanteId, clave)));
+            if (existente.isPresent()) {
+                return resolverIdempotencia(existente.get(), hash);
+            }
+        }
+
+        String referencia = UUID.randomUUID().toString();
+        MercadoPagoClient.Cobro cobro = mercadoPago.crearCobro(referencia, monto, props.mercadoPago().tituloItem());
+        Donacion donacion = new Donacion(referencia, donanteId, monto, cobro.preferenciaId(), cobro.linkPago(),
+                LocalDateTime.now(clock), clave, hash);
+        try {
+            DonacionResponse respuesta = Objects.requireNonNull(
+                    tx.execute(st -> DonacionResponse.desde(repository.saveAndFlush(donacion), true)));
+            donacionesCreadas.increment();
+            log.info("Donacion {} creada PENDIENTE por {} ARS", respuesta.id(), monto);
+            return respuesta;
+        } catch (DataIntegrityViolationException e) {
+            if (clave != null) {
+                Optional<Donacion> ganadora = Objects.requireNonNull(txReadOnly.execute(
+                        st -> repository.findByDonanteIdAndIdempotencyKey(donanteId, clave)));
+                if (ganadora.isPresent()) {
+                    return resolverIdempotencia(ganadora.get(), hash);
+                }
+            }
+            throw e;
+        }
+    }
+
+    private DonacionResponse resolverIdempotencia(Donacion existente, String hashActual) {
+        if (!hashActual.equals(existente.getRequestHash())) {
+            throw new ConflictoException("La clave de idempotencia ya fue utilizada con un monto diferente");
+        }
+        log.info("Reutilizando donacion {} por Idempotency-Key sin duplicar cobro", existente.getId());
+        return DonacionResponse.desde(existente, existente.getEstado() == EstadoDonacion.CONFIRMADA);
+    }
+
+    private static String hashSolicitud(BigDecimal monto) {
+        String canonico = monto.stripTrailingZeros().toPlainString() + "|" + Donacion.MONEDA;
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            return HexFormat.of().formatHex(md.digest(canonico.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 no disponible en la JVM", e);
+        }
+    }
+
+    /**
+     * D-04: el donante ve las suyas; el Coordinador, todas. No consulta al
+     * proveedor.
+     */
+    public List<DonacionResponse> listar(String usuario, boolean coordinador) {
+        return txReadOnly.execute(st -> (coordinador ? repository.findAllByOrderByIdDesc()
+                : repository.findByDonanteIdOrderByIdDesc(usuario))
+                .stream()
+                .map(d -> DonacionResponse.desde(d, d.getEstado() == EstadoDonacion.CONFIRMADA))
+                .toList());
+    }
+
+    /** D-04: version paginada del listado (LIMIT/OFFSET en SQL). */
+    public Page<DonacionResponse> listar(String usuario, boolean coordinador, Pageable pageable) {
+        return txReadOnly.execute(st -> (coordinador ? repository.findAll(pageable)
+                : repository.findByDonanteId(usuario, pageable))
+                .map(d -> DonacionResponse.desde(d, d.getEstado() == EstadoDonacion.CONFIRMADA)));
+    }
+
+    /**
+     * D-04 y D-02: si la donacion esta PENDIENTE, pregunta a Mercado Pago si hay un
+     * pago aprobado
+     * con su referencia. Si el proveedor no responde, devuelve la donacion
+     * PENDIENTE con
+     * verificado = false (se puede volver a consultar mas tarde).
+     */
+    public DonacionResponse obtener(String usuario, boolean coordinador, Long id) {
+        Donacion donacion = Objects.requireNonNull(txReadOnly.execute(st -> buscar(id)));
+        if (!coordinador && !donacion.perteneceA(usuario)) {
+            throw new AccesoDenegadoException("La donacion " + id + " pertenece a otro donante (D-04)");
+        }
+        if (donacion.getEstado() == EstadoDonacion.CONFIRMADA) {
+            return DonacionResponse.desde(donacion, true);
+        }
+
+        Optional<String> pagoAprobado;
+        try {
+            pagoAprobado = mercadoPago.buscarPagoAprobado(donacion.getReferencia());
+        } catch (ServicioNoDisponibleException e) {
+            log.warn("No se pudo verificar la donacion {}: queda PENDIENTE", id);
+            return DonacionResponse.desde(donacion, false);
+        }
+        if (pagoAprobado.isEmpty()) {
+            return DonacionResponse.desde(donacion, true);
+        }
+        return confirmar(id, pagoAprobado.get());
+    }
+
+    /**
+     * F2: ids de donaciones PENDIENTE con antiguedad mayor a la configurada, para
+     * reconciliar.
+     */
+    public List<Long> buscarPendientesParaReconciliar() {
+        LocalDateTime limite = LocalDateTime.now(clock).minus(props.tareas().antiguedadMinima());
+        return txReadOnly.execute(st -> repository
+                .findByEstadoAndFechaCreacionBeforeOrderByIdAsc(EstadoDonacion.PENDIENTE, limite)
+                .stream().map(Donacion::getId).toList());
+    }
+
+    /**
+     * F2: reconcilia una donacion PENDIENTE consultando Mercado Pago fuera de la
+     * transaccion.
+     * Devuelve true solo si efectivamente paso a CONFIRMADA en esta corrida.
+     */
+    public boolean reconciliarPendiente(Long id) {
+        Optional<Donacion> opt = Objects.requireNonNull(txReadOnly.execute(st -> repository.findById(id)));
+        if (opt.isEmpty() || opt.get().getEstado() != EstadoDonacion.PENDIENTE) {
+            return false;
+        }
+        Optional<String> pagoAprobado = mercadoPago.buscarPagoAprobado(opt.get().getReferencia());
+        if (pagoAprobado.isEmpty()) {
+            return false;
+        }
+        return confirmarSiPendiente(id, pagoAprobado.get());
+    }
+
+    /**
+     * F2 (webhook): consulta el detalle autoritativo del pago en Mercado Pago y, si
+     * esta aprobado
+     * y corresponde a una donacion PENDIENTE por external_reference, la confirma
+     * idempotentemente.
+     * Si Mercado Pago no responde propaga ServicioNoDisponibleException (503) para
+     * que reintente.
+     */
+    public boolean procesarNotificacionPago(String pagoId) {
+        Optional<MercadoPagoClient.PagoDetalle> detalleOpt = mercadoPago.obtenerPago(pagoId);
+        if (detalleOpt.isEmpty()) {
+            log.info("Webhook Mercado Pago: pago {} no encontrado en el proveedor", pagoId);
+            return false;
+        }
+        MercadoPagoClient.PagoDetalle detalle = detalleOpt.get();
+        if (!detalle.aprobado() || detalle.externalReference() == null || detalle.externalReference().isBlank()) {
+            log.info("Webhook Mercado Pago: pago {} en estado {} sin confirmacion aplicable",
+                    pagoId, detalle.status());
+            return false;
+        }
+        Optional<Donacion> donacionOpt = Objects.requireNonNull(txReadOnly.execute(
+                st -> repository.findByReferencia(detalle.externalReference().trim())));
+        if (donacionOpt.isEmpty()) {
+            log.warn("Webhook Mercado Pago: pago {} aprobado con referencia desconocida {}",
+                    pagoId, detalle.externalReference());
+            return false;
+        }
+        return confirmarSiPendiente(donacionOpt.get().getId(), detalle.id());
+    }
+
+    /**
+     * D-03: CONFIRMADA es final y un pago (pago_id UNIQUE) no puede confirmar dos
+     * donaciones.
+     */
+    private record ResultadoConfirmacion(DonacionResponse response, boolean transiciono) {
+    }
+
+    private DonacionResponse confirmar(Long id, String pagoId) {
+        try {
+            ResultadoConfirmacion resultado = Objects.requireNonNull(tx.execute(st -> {
+                Donacion d = buscar(id);
+                boolean transiciono = false;
+                if (d.getEstado() == EstadoDonacion.PENDIENTE) {
+                    d.confirmar(pagoId, LocalDateTime.now(clock));
+                    repository.saveAndFlush(d);
+                    transiciono = true;
+                    log.info("Donacion {} CONFIRMADA con el pago {}", id, pagoId);
+                }
+                return new ResultadoConfirmacion(DonacionResponse.desde(d, true), transiciono);
+            }));
+            if (resultado.transiciono()) {
+                donacionesConfirmadas.increment();
+            }
+            return resultado.response();
+        } catch (DataIntegrityViolationException e) {
+            log.error("El pago {} ya estaba asociado a otra donacion; la donacion {} sigue PENDIENTE", pagoId, id);
+            return tx.execute(st -> DonacionResponse.desde(buscar(id), false));
+        }
+    }
+
+    private boolean confirmarSiPendiente(Long id, String pagoId) {
+        try {
+            Boolean confirmada = tx.execute(st -> {
+                Donacion d = buscar(id);
+                if (d.getEstado() != EstadoDonacion.PENDIENTE) {
+                    return false;
+                }
+                d.confirmar(pagoId, LocalDateTime.now(clock));
+                repository.saveAndFlush(d);
+                log.info("Donacion {} CONFIRMADA con el pago {}", id, pagoId);
+                return true;
+            });
+            if (Boolean.TRUE.equals(confirmada)) {
+                donacionesConfirmadas.increment();
+                return true;
+            }
+            return false;
+        } catch (DataIntegrityViolationException e) {
+            log.error("El pago {} ya estaba asociado a otra donacion; la donacion {} sigue PENDIENTE", pagoId, id);
+            return false;
+        }
+    }
+
+    public TotalResponse total() {
+        return txReadOnly.execute(st -> new TotalResponse(
+                repository.sumarMontoPorEstado(EstadoDonacion.CONFIRMADA),
+                repository.countByEstado(EstadoDonacion.CONFIRMADA)));
+    }
+
+    private Donacion buscar(Long id) {
+        return repository.findById(id)
+                .orElseThrow(() -> new RecursoNoEncontradoException("No existe la donacion " + id));
+    }
+}

@@ -77,7 +77,7 @@ Diagramas Mermaid detallados (topología, secuencias P2–P4 y P5, pipeline CI/C
 | `ms-animales` | Dueño del catálogo y de la máquina de estados del animal (`R-13`). Expone API pública y API interna idempotente (`/internal/animales/**`, rol `SERVICIO`). | `8081` (interno) |
 | `ms-adopciones` | Perfiles, solicitudes, evaluación Georef, aprobación/entrega/control, eventos de dominio en proceso, reportes, reconciliador ADR-06 y tareas ShedLock. | `8082` (interno) |
 | `ms-donaciones` | Preferencias Checkout Pro, `Idempotency-Key`, webhook público firmado (`x-signature` HMAC-SHA256), reconciliación ShedLock y consulta bajo demanda. | `8083` (interno) |
-| `tpi-common` | Librería Maven compartida: `ErrorResponse`, `GlobalExceptionHandler`, manejadores JSON `401`/`403`, `JwtTokenValidators`, `KeycloakRoleConverter`, `ResourceServerDefaults` y correlación Servlet/`RestClient`. | — |
+| `common` | Librería Maven compartida: `ErrorResponse`, `GlobalExceptionHandler`, manejadores JSON `401`/`403`, `JwtTokenValidators`, `KeycloakRoleConverter`, `ResourceServerDefaults` y correlación Servlet/`RestClient`. | — |
 | `coverage-report` | Agregador JaCoCo multi-módulo ejecutado en la fase `verify`. | — |
 
 | Tecnología | Versión fijada | Uso |
@@ -85,14 +85,14 @@ Diagramas Mermaid detallados (topología, secuencias P2–P4 y P5, pipeline CI/C
 | Java | 21 (`--release 21`, Temurin `21.0.13.1_2-jre-noble`) | Virtual threads en microservicios MVC; records e inmutabilidad |
 | Spring Boot / Cloud | `3.5.16` / `2025.0.3` | WebMVC, WebFlux Gateway, OAuth2 Resource Server, Actuator, Validation |
 | PostgreSQL + Flyway | `17-alpine` + Flyway | Instancia de negocio aislada en 3 esquemas/usuarios + instancia dedicada de Keycloak |
-| Keycloak | `26.8.1` | OIDC / JWT RS256 (`adopciones-pkce`, `adopciones-service`, `tpi-client` demo) |
+| Keycloak | `26.8.1` | OIDC / JWT RS256 (`adopciones-pkce`, `adopciones-service`, `adopciones-cli` demo) |
 | Resilience4j + ShedLock | Gestionado por Cloud BOM + `6.3.0` | Circuit breakers, retries solo en `GET` y locks distribuidos sobre JDBC |
 
 ---
 
 ## 4. Decisiones de ingeniería destacadas
 
-Las **26 decisiones arquitectónicas (ADR-01 a ADR-26)** están indexadas y justificadas en [`docs/ADR.md`](docs/ADR.md):
+Las **27 decisiones arquitectónicas (ADR-01 a ADR-27)** están indexadas y justificadas en [`docs/ADR.md`](docs/ADR.md):
 
 | Área | Decisión implementada | Referencia |
 |---|---|---|
@@ -117,7 +117,7 @@ Las **26 decisiones arquitectónicas (ADR-01 a ADR-26)** están indexadas y just
 El proyecto incluye **Maven Wrapper** (`./mvnw` / `./mvnw.cmd`, Maven `3.9.16`) y ejecuta todas las compuertas estáticas en `./mvnw clean verify` ([ADR-23](docs/ADR.md#adr-23-compuertas-automatizadas-de-calidad-arquitectura-y-cobertura-ws-6)):
 - **Maven Enforcer:** Java `[21,22)`, Maven `>= 3.9.0` y `dependencyConvergence`.
 - **Checkstyle (`0` violaciones) + SpotBugs (`effort=Max`, `0` bugs)** + **ArchUnit (`18` reglas de arquitectura, prohibición de Lombok y `@Value`)**.
-- **JaCoCo gates bloqueantes:** `>= 80%` líneas en paquetes `*.model` y `*.service`, y `>= 85%` en `tpi-common`.
+- **JaCoCo gates bloqueantes:** `>= 80%` líneas en paquetes `*.model` y `*.service`, y `>= 85%` en `common`.
 
 ```bash
 # Suite rápida de unidad y arquitectura (@Tag("unit") / @ArchTag("unit"), ~1 min local)
@@ -134,7 +134,7 @@ El proyecto incluye **Maven Wrapper** (`./mvnw` / `./mvnw.cmd`, Maven `3.9.16`) 
 
 | Módulo | Tests (`verify` + `*IT`) | Líneas cubiertas | Ramas cubiertas |
 |---|---:|---:|---:|
-| `tpi-common` | 37 | 217 / 217 (**100.0%**) | 84 / 95 (**88.4%**) |
+| `common` | 37 | 217 / 217 (**100.0%**) | 84 / 95 (**88.4%**) |
 | `ms-animales` | 49 + 1 IT | 208 / 223 (**93.3%**) | 62 / 68 (**91.2%**) |
 | `ms-adopciones` | 93 + 1 IT | 848 / 936 (**90.6%**) | 200 / 266 (**75.2%**) |
 | `ms-donaciones` | 38 + 1 IT | 397 / 460 (**86.3%**) | 112 / 176 (**63.6%**) |
@@ -147,7 +147,7 @@ El proyecto incluye **Maven Wrapper** (`./mvnw` / `./mvnw.cmd`, Maven `3.9.16`) 
 
 - **Sin broker de mensajería externo:** para mantener una huella operativa acotada, las transiciones entre `ms-adopciones` y `ms-animales` usan coordinación síncrona idempotente más reconciliación periódica (`ReconciliadorAdopciones`) en lugar de Kafka/RabbitMQ + Outbox (diseño evolutivo documentado en [ADR-17](docs/ADR.md#adr-17-resolución-de-la-inconsistencia-residual-del-adr-06-estado-actual-vs-outbox-vs-saga-con-compensación)).
 - **Distancia en línea recta (Haversine):** `R-06` evalúa distancia geodésica sobre coordenadas de Georef en lugar de ruteo vial pago.
-- **Entorno local vs. borde productivo:** `docker-compose.yml` ejecuta Keycloak con `start-dev` (HTTP local) e incluye el cliente `tpi-client` (*password grant*) junto al cliente `adopciones-pkce` (*PKCE S256*) para facilitar pruebas automatizadas y Postman. El checklist de endurecimiento previo a producción (TLS, desactivación de `tpi-client`, `JWT_REQUIRED_AUDIENCE` y *rate limiting* en el ingress) está detallado en [`docs/SEGURIDAD.md`](docs/SEGURIDAD.md#5-checklist-obligatorio-antes-de-producción-keycloak-y-entorno).
+- **Entorno local vs. borde productivo:** `docker-compose.yml` ejecuta Keycloak con `start-dev` (HTTP local) e incluye el cliente `adopciones-cli` (*password grant*) junto al cliente `adopciones-pkce` (*PKCE S256*) para facilitar pruebas automatizadas y Postman. El checklist de endurecimiento previo a producción (TLS, desactivación de `adopciones-cli`, `JWT_REQUIRED_AUDIENCE` y *rate limiting* en el ingress) está detallado en [`docs/SEGURIDAD.md`](docs/SEGURIDAD.md#5-checklist-obligatorio-antes-de-producción-keycloak-y-entorno).
 
 ---
 
@@ -155,7 +155,7 @@ El proyecto incluye **Maven Wrapper** (`./mvnw` / `./mvnw.cmd`, Maven `3.9.16`) 
 
 - [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md) — Topología, fronteras de red, diagramas de secuencia y CI/CD.
 - [`docs/API.md`](docs/API.md) y [`docs/openapi/`](docs/openapi) — Referencia completa de endpoints, códigos de error, webhooks y especificaciones OpenAPI 3.
-- [`docs/ADR.md`](docs/ADR.md) — Registro indexado de las 26 decisiones arquitectónicas (ADR-01 a ADR-26).
+- [`docs/ADR.md`](docs/ADR.md) — Registro indexado de las 27 decisiones arquitectónicas (ADR-01 a ADR-27).
 - [`docs/SEGURIDAD.md`](docs/SEGURIDAD.md) y [`SECURITY.md`](SECURITY.md) — Modelo de amenazas STRIDE, validación JWT, gestión VEX/CVEs y reporte de vulnerabilidades.
 - [`docs/OPERACION.md`](docs/OPERACION.md) — Runbook de despliegue, probes, Prometheus, `X-Correlation-ID`, ShedLock, backups PostgreSQL y rotación de secretos.
 - [`docs/rendimiento.md`](docs/rendimiento.md) — Eliminación de N+1 y benchmark `EXPLAIN (ANALYZE, BUFFERS)` con 10.000 filas en PostgreSQL 17.

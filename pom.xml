@@ -12,15 +12,15 @@
         <relativePath/>
     </parent>
 
-    <groupId>utnfc.isi.back.tpi</groupId>
-    <artifactId>tpi-backend-2026</artifactId>
+    <groupId>ar.org.refugio</groupId>
+    <artifactId>refugio-animales-backend</artifactId>
     <version>1.0.0-SNAPSHOT</version>
     <packaging>pom</packaging>
-    <name>tpi-backend-2026</name>
+    <name>refugio-animales-backend</name>
     <description>Backend de microservicios - Adopcion responsable de animales</description>
 
     <modules>
-        <module>tpi-common</module>
+        <module>common</module>
         <module>ms-animales</module>
         <module>ms-adopciones</module>
         <module>ms-donaciones</module>
@@ -66,8 +66,8 @@
                 <version>${springdoc.version}</version>
             </dependency>
             <dependency>
-                <groupId>utnfc.isi.back.tpi</groupId>
-                <artifactId>tpi-common</artifactId>
+                <groupId>ar.org.refugio</groupId>
+                <artifactId>common</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <!-- Parche de seguridad Bouncy Castle (CVE-2026-8763, CVE-2026-13506) -->
@@ -212,8 +212,8 @@
                                 <rule>
                                     <element>PACKAGE</element>
                                     <includes>
-                                        <include>utnfc.isi.back.tpi.*.model</include>
-                                        <include>utnfc.isi.back.tpi.*.service</include>
+                                        <include>ar.org.refugio.*.model</include>
+                                        <include>ar.org.refugio.*.service</include>
                                     </includes>
                                     <limits>
                                         <limit>

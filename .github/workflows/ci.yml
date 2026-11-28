@@ -52,7 +52,7 @@ jobs:
           groups = defaultdict(lambda: [0, 0, 0, 0])
           with open(csv_path, newline="", encoding="utf-8") as f:
               for row in csv.DictReader(f):
-                  mod = ".".join(row["PACKAGE"].split(".")[:5])
+                  mod = ".".join(row["PACKAGE"].split(".")[:4])
                   g = groups[mod]
                   g[0] += int(row["LINE_COVERED"])
                   g[1] += int(row["LINE_MISSED"]) + int(row["LINE_COVERED"])

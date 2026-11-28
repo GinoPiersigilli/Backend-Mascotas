@@ -42,9 +42,9 @@ El build falla en la fase `verify` si se incumple cualquiera de estas reglas:
 2. **Separación estricta de capas (`ArchUnit`):**
    - Los controladores no acceden directamente a repositorios.
    - El paquete `..model..` no depende de controladores, servicios, clientes HTTP ni DTOs.
-   - Cero dependencias cruzadas entre microservicios; `gateway` no depende de `tpi-common`.
+   - Cero dependencias cruzadas entre microservicios; `gateway` no depende de `common`.
 3. **Calidad estática:** `0` violaciones de Checkstyle (`config/checkstyle/checkstyle.xml`) y `0` bugs en SpotBugs (`effort=Max`, `threshold=Medium`).
-4. **Cobertura mínima (JaCoCo):** `>= 80%` de líneas en cada paquete `*.model` y `*.service`, y `>= 85%` de líneas sobre el bundle aislado `tpi-common`.
+4. **Cobertura mínima (JaCoCo):** `>= 80%` de líneas en cada paquete `*.model` y `*.service`, y `>= 85%` de líneas sobre el bundle aislado `common`.
 5. **Evolución de esquemas y contratos:** cualquier cambio en base de datos requiere una nueva migración `V<N>__descripcion.sql` (nunca editar migraciones ya publicadas) y mantener retrocompatibilidad aditiva bajo `/api/**` ([ADR-19](docs/ADR.md#adr-19-política-de-versionado-de-la-api-rest-api)).
 
 ---

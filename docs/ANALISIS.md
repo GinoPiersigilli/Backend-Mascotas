@@ -7,7 +7,7 @@
 | 1 | Especificación técnica del proyecto | Requisitos técnicos base (RC-xx) |
 | 2 | Definición de alcance y criterios de calidad | Proceso central, reglas, colaboración y evidencia |
 | 3 | Documento de dominio del equipo (v2) y `CONTRATOS.md` | Alcance comprometido (procesos P1–P5, reglas R-01..R-13, D-01..D-04) y contratos |
-| 4 | Esqueleto existente (pom multimódulo, Dockerfiles, `tpi-common` inicial, pings) | Se conservaron convenciones: paquetes, puertos, nombres de módulos y de variables |
+| 4 | Esqueleto existente (pom multimódulo, Dockerfiles, `common` inicial, pings) | Se conservaron convenciones: paquetes, puertos, nombres de módulos y de variables |
 | 5 | Decisiones de diseño propias | Ver [ADR.md](ADR.md) |
 
 Las guías de Google Distance Matrix y OSRM se leyeron como alternativas de integración; el
@@ -24,7 +24,7 @@ documento de dominio ya las descarta (clave paga y despliegue local, respectivam
 | RC-05 | Gateway enruta y tiene Security Filter | gateway | `SecurityConfig` (WebFlux), rutas en `application.yml` |
 | RC-06 | API pública externa con información necesaria para una regla | ms-adopciones (Georef), ms-donaciones (Mercado Pago) | `GeorefClient`, `MercadoPagoClient` |
 | RC-07 | Keycloak + OIDC + JWT + Spring Security + roles + integración con el Gateway + trusted zone | todos | `realm-adopciones.json`, `SecurityConfig` de cada módulo |
-| RC-08 | Componente común JAR Maven independiente usado por los ≥ 2 servicios principales vía `.m2` | tpi-common | `pom.xml` de los servicios, Dockerfiles |
+| RC-08 | Componente común JAR Maven independiente usado por los ≥ 2 servicios principales vía `.m2` | common | `pom.xml` de los servicios, Dockerfiles |
 | RC-09 | DBMS relacional y estrategia de separación explicada | PostgreSQL | `01-esquemas.sh`, `default_schema` |
 | RC-10 | APIs REST: métodos, códigos, JSON, validación, errores, OpenAPI fiel | servicios | controladores, `GlobalExceptionHandler`, springdoc |
 | RC-11 | Contenerización y Docker Compose reproducible del sistema completo | infra | Dockerfiles, `docker-compose*.yml` |

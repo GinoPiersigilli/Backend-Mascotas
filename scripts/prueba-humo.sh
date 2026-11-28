@@ -34,7 +34,7 @@ extraer_json() {
 
 token() {
   curl -s -X POST "$KEYCLOAK/realms/adopciones/protocol/openid-connect/token" \
-    -d grant_type=password -d client_id=tpi-client -d username="$1" -d password="$DEMO_USERS_PASSWORD" \
+    -d grant_type=password -d client_id=adopciones-cli -d username="$1" -d password="$DEMO_USERS_PASSWORD" \
     | extraer_json "access_token"
 }
 

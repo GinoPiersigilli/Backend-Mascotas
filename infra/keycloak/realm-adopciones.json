@@ -15,7 +15,7 @@
   },
   "clients": [
     {
-      "clientId": "tpi-client",
+      "clientId": "adopciones-cli",
       "name": "Cliente de usuarios demo (solo desarrollo local / Postman con password grant)",
       "enabled": true,
       "protocol": "openid-connect",

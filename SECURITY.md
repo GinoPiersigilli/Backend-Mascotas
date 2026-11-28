@@ -13,7 +13,7 @@ Si detectás una vulnerabilidad de seguridad en este repositorio:
 1. **No abras un issue público** con detalles explotables ni credenciales.
 2. Utilizá **GitHub Security Advisories** (*Security → Advisories → Report a vulnerability*) en este repositorio o contactá al mantenedor de forma privada.
 3. Incluí en el reporte:
-   - Componente afectado (`gateway`, `ms-animales`, `ms-adopciones`, `ms-donaciones`, `tpi-common` o `infra/`).
+   - Componente afectado (`gateway`, `ms-animales`, `ms-adopciones`, `ms-donaciones`, `common` o `infra/`).
    - Pasos mínimos para reproducir el problema y el impacto esperado.
    - Si aplica, una sugerencia de mitigación.
 

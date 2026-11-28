@@ -28,6 +28,7 @@ Todos los cambios relevantes de este proyecto se documentan en este archivo sigu
   - Documentación de arquitectura y gobernanza OSS (`docs/ARQUITECTURA.md`, `CONTRIBUTING.md`, plantillas de Issues y Pull Requests).
 
 ### Changed
+- Normalización integral del espacio de nombres Java (`ar.org.refugio.*`), coordenadas Maven (`refugio-animales-backend`), módulo `common`, recursos Docker (`refugio-*`), cliente demo `adopciones-cli` y colección Postman (`Refugio-*`), preservando intactos los contratos HTTP (ADR-27).
 - Actualización de dependencias de seguridad sobre Spring Boot `3.5.16` (`postgresql 42.7.12`, `jackson 2.21.9`, `tomcat 10.1.62`, `netty 4.1.141.Final`, `bouncycastle 1.87`).
 
 ### Removed

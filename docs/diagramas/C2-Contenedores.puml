@@ -15,7 +15,7 @@ Person(coordinador, "Coordinador", "Gestiona animales, decide sobre solicitudes,
 System_Ext(georef, "API Georef", "API pública REST (apis.datos.gob.ar). GET /direcciones: latitud y longitud de un domicilio.")
 System_Ext(mercadopago, "Mercado Pago", "API REST de pagos. POST /checkout/preferences y GET /v1/payments/search. Aloja la página donde paga el donante.")
 
-System_Boundary(sistema, "Sistema de Adopción Responsable (red Docker tpi-net)") {
+System_Boundary(sistema, "Sistema de Adopción Responsable (red Docker refugio-net)") {
 
     Container(gateway, "API Gateway", "Java 21, Spring Cloud Gateway (WebFlux), Spring Security", "Única entrada. Security Filter: valida el JWT y exige rol ADOPTANTE o COORDINADOR en /api/~*~*. Enruta sin reescribir rutas, no publica /internal/~*~*, genera X-Correlation-ID y traduce caídas internas a 503.")
 
@@ -25,13 +25,13 @@ System_Boundary(sistema, "Sistema de Adopción Responsable (red Docker tpi-net)"
 
     Container(donaciones, "ms-donaciones", "Java 21, Spring Boot 3.5, Spring Security", "Dueño de las donaciones (D-01 a D-04). Crea el cobro y confirma la acreditación consultando al proveedor.")
 
-    Container(common, "tpi-common", "JAR Maven 1.0.0-SNAPSHOT", "Formato único de error, excepciones, manejador global, conversor de roles de Keycloak, 401/403 en JSON, configuración base de Resource Server y correlación. Se instala en .m2; no se despliega.", $tags="lib")
+    Container(common, "common", "JAR Maven 1.0.0-SNAPSHOT", "Formato único de error, excepciones, manejador global, conversor de roles de Keycloak, 401/403 en JSON, configuración base de Resource Server y correlación. Se instala en .m2; no se despliega.", $tags="lib")
 
     Container(keycloak, "Keycloak", "Keycloak 26 (OIDC)", "Identity Provider. Realm 'adopciones' importado al arrancar. Emite JWT con iss fijo (KC_HOSTNAME) y realm_access.roles. Parte del despliegue.")
 
     ContainerDb(kcdb, "keycloak-db", "PostgreSQL 17 (instancia propia)", "Realm, usuarios y roles. Separada de los datos de negocio.")
 
-    ContainerDb(db, "postgres (negocio)", "PostgreSQL 17", "Base 'tpi' con un esquema y un usuario por servicio: animales, adopciones, donaciones.")
+    ContainerDb(db, "postgres (negocio)", "PostgreSQL 17", "Base 'refugio' con un esquema y un usuario por servicio: animales, adopciones, donaciones.")
 }
 
 Rel(adoptante, keycloak, "Obtiene un token JWT", "OIDC / HTTP", $tags="seguridad")
