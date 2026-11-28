@@ -1,5 +1,7 @@
 package utnfc.isi.back.tpi.donaciones.service;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -48,9 +50,11 @@ public class DonacionService {
     private final TransactionTemplate tx;
     private final TransactionTemplate txReadOnly;
     private final Clock clock;
+    private final Counter donacionesCreadas;
+    private final Counter donacionesConfirmadas;
 
     public DonacionService(DonacionRepository repository, MercadoPagoClient mercadoPago, DonacionesProperties props,
-            PlatformTransactionManager transactionManager, Clock clock) {
+            PlatformTransactionManager transactionManager, Clock clock, MeterRegistry meterRegistry) {
         this.repository = repository;
         this.mercadoPago = mercadoPago;
         this.props = props;
@@ -58,6 +62,12 @@ public class DonacionService {
         this.txReadOnly = new TransactionTemplate(transactionManager);
         this.txReadOnly.setReadOnly(true);
         this.clock = clock;
+        this.donacionesCreadas = Counter.builder("donaciones.creadas")
+                .description("Total de donaciones creadas en estado PENDIENTE")
+                .register(meterRegistry);
+        this.donacionesConfirmadas = Counter.builder("donaciones.confirmadas")
+                .description("Total de donaciones confirmadas con pago aprobado")
+                .register(meterRegistry);
     }
 
     /**
@@ -96,6 +106,7 @@ public class DonacionService {
         try {
             DonacionResponse respuesta = Objects.requireNonNull(
                     tx.execute(st -> DonacionResponse.desde(repository.saveAndFlush(donacion), true)));
+            donacionesCreadas.increment();
             log.info("Donacion {} creada PENDIENTE por {} ARS", respuesta.id(), monto);
             return respuesta;
         } catch (DataIntegrityViolationException e) {
@@ -238,17 +249,26 @@ public class DonacionService {
      * D-03: CONFIRMADA es final y un pago (pago_id UNIQUE) no puede confirmar dos
      * donaciones.
      */
+    private record ResultadoConfirmacion(DonacionResponse response, boolean transiciono) {
+    }
+
     private DonacionResponse confirmar(Long id, String pagoId) {
         try {
-            return tx.execute(st -> {
+            ResultadoConfirmacion resultado = Objects.requireNonNull(tx.execute(st -> {
                 Donacion d = buscar(id);
+                boolean transiciono = false;
                 if (d.getEstado() == EstadoDonacion.PENDIENTE) {
                     d.confirmar(pagoId, LocalDateTime.now(clock));
                     repository.saveAndFlush(d);
+                    transiciono = true;
                     log.info("Donacion {} CONFIRMADA con el pago {}", id, pagoId);
                 }
-                return DonacionResponse.desde(d, true);
-            });
+                return new ResultadoConfirmacion(DonacionResponse.desde(d, true), transiciono);
+            }));
+            if (resultado.transiciono()) {
+                donacionesConfirmadas.increment();
+            }
+            return resultado.response();
         } catch (DataIntegrityViolationException e) {
             log.error("El pago {} ya estaba asociado a otra donacion; la donacion {} sigue PENDIENTE", pagoId, id);
             return tx.execute(st -> DonacionResponse.desde(buscar(id), false));
@@ -267,7 +287,11 @@ public class DonacionService {
                 log.info("Donacion {} CONFIRMADA con el pago {}", id, pagoId);
                 return true;
             });
-            return Boolean.TRUE.equals(confirmada);
+            if (Boolean.TRUE.equals(confirmada)) {
+                donacionesConfirmadas.increment();
+                return true;
+            }
+            return false;
         } catch (DataIntegrityViolationException e) {
             log.error("El pago {} ya estaba asociado a otra donacion; la donacion {} sigue PENDIENTE", pagoId, id);
             return false;

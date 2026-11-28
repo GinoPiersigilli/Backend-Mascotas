@@ -225,3 +225,12 @@ Formato: contexto → alternativas → decisión → consecuencias → evidencia
   - **ArchUnit (`ArquitecturaTest` en los 4 servicios):** bloquea acceso directo de controladores a repositorios, dependencias de `..model..` hacia capas web/servicios/clientes, dependencias cruzadas entre microservicios, uso de Lombok y `@Value`.
   - **JaCoCo (`jacoco:check` + `coverage-report`):** exige `>= 80%` de cobertura de líneas en paquetes `*.model` y `*.service`, y genera reporte agregado multi-módulo en `coverage-report/target/site/jacoco-aggregate/`.
 - **Evidencia:** `mvnw`, `mvnw.cmd`, `pom.xml`, `config/checkstyle/checkstyle.xml`, `config/spotbugs/exclude.xml`, `coverage-report/pom.xml`, `*/src/test/.../ArquitecturaTest.java`.
+
+## ADR-24 — Apagado ordenado (Graceful Shutdown) y métricas de negocio en Prometheus (WS-8)
+- **Contexto:** sin `server.shutdown: graceful`, un reinicio o despliegue puede abortar solicitudes HTTP en curso o dejar transacciones a mitad de camino; además `ms-donaciones` carecía de contadores de creación/confirmación/webhooks y `ms-adopciones` no exponía la distribución instantánea de solicitudes por estado.
+- **Decisión:**
+  - Activar `server.shutdown: graceful` y `spring.lifecycle.timeout-per-shutdown-phase: 20s` (configurable con `SHUTDOWN_TIMEOUT`) en `gateway`, `ms-animales`, `ms-adopciones` y `ms-donaciones`, acompañado de `stop_grace_period: 30s` en `docker-compose.yml` para superar el timeout de drenaje antes de `SIGKILL`.
+  - Exponer contadores `donaciones.creadas`, `donaciones.confirmadas`, `donaciones.webhooks.recibidos` y `donaciones.webhooks.rechazados` en `ms-donaciones`, incrementados solo tras confirmar la transacción (sin duplicar en reintentos idempotentes).
+  - Exponer el gauge `adopciones.solicitudes.actuales{estado="..."}` en `ms-adopciones` respaldado por una única consulta `GROUP BY` compartida por los 7 estados con caché configurable (`adopciones.metricas.cache-ttl=5s`, `0s` en pruebas) y degradación segura a `NaN` si la base no responde.
+  - Documentar despliegue, probes, scraping Prometheus interno, troubleshooting con `X-Correlation-ID`, ShedLock, backup/restore de PostgreSQL y rotación de secretos en `docs/OPERACION.md`.
+- **Evidencia:** `*/src/main/resources/application.yml`, `docker-compose.yml`, `MetricasSolicitudes.java`, `DonacionService.java`, `MercadoPagoWebhookController.java`, `*MetricasTest.java`, `docs/OPERACION.md`.

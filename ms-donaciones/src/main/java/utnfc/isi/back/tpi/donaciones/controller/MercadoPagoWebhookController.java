@@ -1,6 +1,8 @@
 package utnfc.isi.back.tpi.donaciones.controller;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -37,10 +39,19 @@ public class MercadoPagoWebhookController {
 
     private final VerificadorFirmaMercadoPago verificador;
     private final DonacionService donacionService;
+    private final Counter webhooksRecibidos;
+    private final Counter webhooksRechazados;
 
-    public MercadoPagoWebhookController(VerificadorFirmaMercadoPago verificador, DonacionService donacionService) {
+    public MercadoPagoWebhookController(VerificadorFirmaMercadoPago verificador, DonacionService donacionService,
+                                        MeterRegistry meterRegistry) {
         this.verificador = verificador;
         this.donacionService = donacionService;
+        this.webhooksRecibidos = Counter.builder("donaciones.webhooks.recibidos")
+                .description("Total de notificaciones webhook de Mercado Pago aceptadas con firma valida")
+                .register(meterRegistry);
+        this.webhooksRechazados = Counter.builder("donaciones.webhooks.rechazados")
+                .description("Total de notificaciones webhook de Mercado Pago rechazadas por firma invalida")
+                .register(meterRegistry);
     }
 
     @PostMapping
@@ -65,9 +76,11 @@ public class MercadoPagoWebhookController {
             @RequestBody(required = false) WebhookPayload body) {
         String dataId = primeroNoVacio(queryDataId, body != null && body.data() != null ? body.data().id() : null);
         if (!verificador.esValida(xSignature, xRequestId, dataId)) {
+            webhooksRechazados.increment();
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(ErrorResponse.of(HttpStatus.UNAUTHORIZED, "Firma del webhook invalida o ausente", RUTA, List.of()));
         }
+        webhooksRecibidos.increment();
 
         String tipo = primeroNoVacio(queryType, body != null ? body.type() : null);
         String accion = body != null ? body.action() : null;

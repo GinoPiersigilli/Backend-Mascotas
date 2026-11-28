@@ -101,6 +101,7 @@ services:
       dockerfile: ms-animales/Dockerfile
     image: tpi/ms-animales:1.0.0
     container_name: ms-animales
+    stop_grace_period: 30s
     environment:
       <<: *keycloak-validacion
       DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
@@ -126,6 +127,7 @@ services:
       dockerfile: ms-adopciones/Dockerfile
     image: tpi/ms-adopciones:1.0.0
     container_name: ms-adopciones
+    stop_grace_period: 30s
     environment:
       <<: *keycloak-validacion
       DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
@@ -162,6 +164,7 @@ services:
       dockerfile: ms-donaciones/Dockerfile
     image: tpi/ms-donaciones:1.0.0
     container_name: ms-donaciones
+    stop_grace_period: 30s
     environment:
       <<: *keycloak-validacion
       DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
@@ -191,6 +194,7 @@ services:
       dockerfile: gateway/Dockerfile
     image: tpi/gateway:1.0.0
     container_name: gateway
+    stop_grace_period: 30s
     environment:
       <<: *keycloak-validacion
       ANIMALES_URL: http://ms-animales:8081
