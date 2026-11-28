@@ -7,7 +7,7 @@
 services:
   wiremock:
     image: wiremock/wiremock:3.12.1
-    container_name: tpi-wiremock
+    container_name: refugio-wiremock
     command: ["--global-response-templating"]
     volumes:
       - ./infra/wiremock/mappings:/home/wiremock/mappings:ro
@@ -16,7 +16,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 15
-    networks: [tpi-net]
+    networks: [refugio-net]
     logging:
       driver: json-file
       options:

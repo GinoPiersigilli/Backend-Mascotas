@@ -14,7 +14,7 @@ Formato: contexto → alternativas → decisión → consecuencias → evidencia
 | [ADR-06](#adr-06-consistencia-entre-servicios-sin-transacción-distribuida) | Consistencia entre servicios con `flush` local previo, *rollback* ante fallo remoto y reconciliación | Aceptado (ampliado por ADR-21) | 2026-10 |
 | [ADR-07](#adr-07-concurrencia-columnas-de-bloqueo-con-unique--bloqueo-optimista) | Control de concurrencia con columnas `UNIQUE` condicionales y bloqueo optimista `@Version` | Aceptado | 2026-10 |
 | [ADR-08](#adr-08-persistencia-una-instancia-esquema-y-usuario-por-servicio-keycloak-aparte) | Persistencia aislada por esquema y usuario PostgreSQL; base independiente para Keycloak | Aceptado (evolucionado por ADR-26) | 2026-10 |
-| [ADR-09](#adr-09-componente-común-qué-se-comparte-y-qué-no) | Librería común liviana (`tpi-common`) sin acoplar modelos ni al Gateway reactivo | Aceptado | 2026-10 |
+| [ADR-09](#adr-09-componente-común-qué-se-comparte-y-qué-no) | Librería común liviana (`common`) sin acoplar modelos ni al Gateway reactivo | Aceptado | 2026-10 |
 | [ADR-10](#adr-10-georef-como-fuente-de-ubicación-y-distancia-en-línea-recta) | Geolocalización con API Georef + distancia Haversine con degradación no bloqueante | Aceptado | 2026-10 |
 | [ADR-11](#adr-11-mercado-pago-checkout-pro-con-webhook-firmado-reconciliación-periódica-y-verificación-bajo-demanda) | Integración Mercado Pago Checkout Pro con webhook HMAC-SHA256, reconciliación y consulta | Aceptado (ampliado por ADR-21) | 2026-11 |
 | [ADR-12](#adr-12-sin-lombok-records-para-dto) | Prohibición de Lombok; `record` de Java 21 para DTOs y propiedades tipadas | Aceptado | 2026-10 |
@@ -32,6 +32,7 @@ Formato: contexto → alternativas → decisión → consecuencias → evidencia
 | [ADR-24](#adr-24--apagado-ordenado-graceful-shutdown-y-métricas-de-negocio-en-prometheus-ws-8) | Graceful shutdown (`20s`/`30s`), contadores/gauges de negocio en Prometheus y runbook operativo | Aceptado | 2026-11 |
 | [ADR-25](#adr-25--fijación-de-imágenes-base-metadatos-oci-límites-de-recursos-y-pipeline-cicd-completo-ws-9) | Fijación de imágenes base, etiquetas OCI, límites de recursos y pipeline CI/CD completo con GHCR | Aceptado | 2026-11 |
 | [ADR-26](#adr-26--migraciones-flyway-paginación-aditiva-y-protección-interna-de-prometheus) | Migraciones Flyway + `ddl-auto: validate`, paginación aditiva (`X-Total-Count`) y `/actuator/prometheus` interno | Aceptado | 2026-11 |
+| [ADR-27](#adr-27--normalización-de-espacio-de-nombres-módulo-común-e-identificadores-de-infraestructura-ws-11) | Normalización a `ar.org.refugio`, módulo `common`, cliente `adopciones-cli` y recursos `refugio-*` | Aceptado | 2026-11 |
 
 ---
 
@@ -93,7 +94,7 @@ Formato: contexto → alternativas → decisión → consecuencias → evidencia
 ## ADR-08. Persistencia: una instancia, esquema y usuario por servicio; Keycloak aparte
 
 - **Alternativas:** una base por servicio (más contenedores), esquemas compartidos con un solo usuario (aislamiento débil).
-- **Decisión:** base `tpi` con esquemas `animales`, `adopciones`, `donaciones`, cada uno propiedad de su usuario; Keycloak en `keycloak-db`.
+- **Decisión:** base `refugio` con esquemas `animales`, `adopciones`, `donaciones`, cada uno propiedad de su usuario; Keycloak en `keycloak-db`.
 - **Consecuencias:** aislamiento real por permisos SQL con un solo contenedor de negocio; Keycloak se recrea sin tocar datos de negocio. La evolución de cada esquema se gestiona mediante migraciones SQL versionadas con **Flyway** y `ddl-auto: validate` (ver [ADR-26](#adr-26--migraciones-flyway-paginación-aditiva-y-protección-interna-de-prometheus)).
 - **Evidencia:** `infra/postgres/init/01-esquemas.sh`, `hibernate.default_schema`, `*/src/main/resources/db/migration/V*.sql`.
 
@@ -243,8 +244,8 @@ Formato: contexto → alternativas → decisión → consecuencias → evidencia
 
 - **Contexto:** la validación JWT por defecto de Spring verificaba firma, `iss` y `exp` con un *clock skew* implícito de 60 s sin restringir cliente (`azp`) ni audiencia (`aud`); además, Actuator no declaraba explícitamente probes `liveness`/`readiness` ni `show-details: never`, y el repositorio no tenía escaneos automatizados de seguridad ni modelo de amenazas documentado.
 - **Decisión:**
-  - `JwtTokenValidators` (`tpi-common`) + `JwtValidationConfig` y su espejo reactivo `GatewayJwtValidators` (`gateway`) configuran decodificadores perezosos (`withJwkSetUri`, preservando ADR-05) con `JWT_CLOCK_SKEW=30s`, lista blanca de `azp` (`GATEWAY_JWT_ALLOWED_CLIENTS` limita el Gateway solo a clientes públicos de usuario) y audiencia obligatoria opcional (`JWT_REQUIRED_AUDIENCE`).
-  - Se añade el cliente público `adopciones-pkce` (*Authorization Code + PKCE S256*, `directAccessGrantsEnabled: false`) en `infra/keycloak/realm-adopciones.json`, manteniendo `tpi-client` documentado solo para demo local.
+  - `JwtTokenValidators` (`common`) + `JwtValidationConfig` y su espejo reactivo `GatewayJwtValidators` (`gateway`) configuran decodificadores perezosos (`withJwkSetUri`, preservando ADR-05) con `JWT_CLOCK_SKEW=30s`, lista blanca de `azp` (`GATEWAY_JWT_ALLOWED_CLIENTS` limita el Gateway solo a clientes públicos de usuario) y audiencia obligatoria opcional (`JWT_REQUIRED_AUDIENCE`).
+  - Se añade el cliente público `adopciones-pkce` (*Authorization Code + PKCE S256*, `directAccessGrantsEnabled: false`) en `infra/keycloak/realm-adopciones.json`, manteniendo `adopciones-cli` documentado solo para demo local.
   - Se habilitan `management.endpoint.health.probes.enabled: true` y `show-details: never` en los 4 servicios, junto con matrices negativas IDOR/RBAC, `.github/dependabot.yml`, `.github/workflows/security.yml` (CodeQL, gitleaks, Trivy FS/imágenes, dependency-review), `SECURITY.md` y `docs/SEGURIDAD.md`.
 - **Evidencia:** `JwtTokenValidators`, `JwtValidationConfig`, `GatewayJwtValidators`, `JwtTokenValidatorsTest`, `GatewayJwtValidatorTest`, `AdopcionesSecurityMatrixTest`, `DonacionesSecurityMatrixTest`, `AnimalesSecurityMatrixTest`, `SECURITY.md`, `docs/SEGURIDAD.md`, `.github/workflows/security.yml`.
 
@@ -284,3 +285,10 @@ Formato: contexto → alternativas → decisión → consecuencias → evidencia
   - **Paginación aditiva (`page=0`, `size=50`, máx. `100` + `X-Total-Count`):** los listados paginan en SQL (`LIMIT`/`OFFSET` combinados con `@BatchSize(50)` para evitar `HHH90003004` y N+1), conservando un arreglo JSON como cuerpo y publicando el total en la cabecera `X-Total-Count`.
   - **Prometheus interno con `ROLE_SERVICIO`:** `/actuator/prometheus` no se enruta en el API Gateway y exige un JWT con rol `SERVICIO` en cada microservicio (`401`/`403` verificados en `*MetricasTest`).
 - **Evidencia:** `*/src/main/resources/db/migration/V*.sql`, `*FlywayMigrationIT.java`, `*PaginacionTest.java`, `SolicitudListarQueryCountTest.java`, `*MetricasTest.java`, `docs/rendimiento.md`.
+
+## ADR-27 — Normalización de espacio de nombres, módulo común e identificadores de infraestructura (WS-11)
+- **Contexto:** los paquetes Java, coordenadas Maven, módulo compartido, contenedores, red/volúmenes de Docker Compose, cliente demo de Keycloak y colección Postman arrastraban prefijos iniciales de plantilla que no reflejaban el dominio del sistema.
+- **Decisión:**
+  - Unificar coordenadas Maven bajo `ar.org.refugio:refugio-animales-backend`, renombrar el módulo compartido a `common` y mover los 5 paquetes raíz a `ar.org.refugio.{common,animales,adopciones,donaciones,gateway}` preservando el historial de archivos con `git mv`.
+  - Normalizar identificadores de infraestructura en Compose, Keycloak, scripts y Postman (`refugio-adopciones`, `refugio-net`, `refugio-postgres*`, `refugio-keycloak*`, `refugio-wiremock`, `adopciones-cli` y `postman/Refugio-*`), manteniendo intactas todas las rutas y contratos HTTP públicos (`/api/**`).
+- **Evidencia:** `pom.xml`, `common/`, `docker-compose*.yml`, `infra/keycloak/realm-adopciones.json`, `postman/Refugio-*`, `*/src/.../ArquitecturaTest.java`.

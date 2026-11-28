@@ -19,13 +19,13 @@ Aplica automáticamente `docker-compose.yml` + `docker-compose.override.yml` (ha
 docker compose -f docker-compose.yml -f docker-compose.demo.yml up --build -d --wait
 EXPECT_DONACIONES=true ./scripts/prueba-humo.sh
 ```
-Sustituye Georef y Mercado Pago por el contenedor `tpi-wiremock` con stubs en `infra/wiremock/mappings/` y fija `PERIODO_ADAPTACION_DIAS=0` para recorrer el ciclo P1–P5 completo sin acceso a Internet.
+Sustituye Georef y Mercado Pago por el contenedor `refugio-wiremock` con stubs en `infra/wiremock/mappings/` y fija `PERIODO_ADAPTACION_DIAS=0` para recorrer el ciclo P1–P5 completo sin acceso a Internet.
 
 ### 1.3 Perfil base (sin override de desarrollo)
 ```bash
 docker compose -f docker-compose.yml up --build -d --wait
 ```
-Solo expone el API Gateway (`:8080`) y Keycloak (`:8180`). Los microservicios (`:8081–:8083`) y las bases de datos quedan aislados en la red interna `tpi-net` con `SWAGGER_ENABLED=false`.
+Solo expone el API Gateway (`:8080`) y Keycloak (`:8180`). Los microservicios (`:8081–:8083`) y las bases de datos quedan aislados en la red interna `refugio-net` con `SWAGGER_ENABLED=false`.
 
 ---
 
@@ -48,7 +48,7 @@ Todos los servicios (`gateway`, `ms-animales`, `ms-adopciones`, `ms-donaciones`)
 
 ## 3. Métricas y scraping Prometheus
 
-Los 3 microservicios (`ms-animales:8081`, `ms-adopciones:8082`, `ms-donaciones:8083`) exponen `GET /actuator/prometheus` **exclusivamente en la red interna `tpi-net`** y protegido con rol `SERVICIO`. El API Gateway no tiene ruta hacia `/actuator/prometheus`.
+Los 3 microservicios (`ms-animales:8081`, `ms-adopciones:8082`, `ms-donaciones:8083`) exponen `GET /actuator/prometheus` **exclusivamente en la red interna `refugio-net`** y protegido con rol `SERVICIO`. El API Gateway no tiene ruta hacia `/actuator/prometheus`.
 
 ### Consulta manual desde la red interna
 ```bash
@@ -132,8 +132,8 @@ Repara automáticamente los desajustes seguros (por ejemplo, animal que quedó `
 ## 6. Backup y restore de PostgreSQL
 
 Hay dos instancias PostgreSQL 17 con volúmenes dedicados:
-- `tpi-postgres` (`tpi-postgres-data`): base de negocio con 3 esquemas (`animales`, `adopciones`, `donaciones`).
-- `tpi-keycloak-db` (`tpi-keycloak-db-data`): base del realm de Keycloak.
+- `refugio-postgres` (`refugio-postgres-data`): base de negocio con 3 esquemas (`animales`, `adopciones`, `donaciones`).
+- `refugio-keycloak-db` (`refugio-keycloak-db-data`): base del realm de Keycloak.
 
 > **Advertencia:** `docker compose down -v` **elimina ambos volúmenes**. Usar `docker compose down` (sin `-v`) para detener contenedores preservando datos.
 
@@ -144,20 +144,20 @@ FECHA=$(date +%Y%m%d_%H%M%S)
 
 # Base de negocio completa (los 3 esquemas)
 docker compose exec -T postgres pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc \
-  > "backups/tpi_negocio_${FECHA}.dump"
+  > "backups/refugio_negocio_${FECHA}.dump"
 
 # O respaldo de un único esquema (ejemplo: adopciones)
 docker compose exec -T postgres pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -n adopciones -Fc \
-  > "backups/tpi_adopciones_${FECHA}.dump"
+  > "backups/refugio_adopciones_${FECHA}.dump"
 
 # Base de Keycloak
 docker compose exec -T keycloak-db pg_dump -U "$KC_DB_USER" -d keycloak -Fc \
-  > "backups/tpi_keycloak_${FECHA}.dump"
+  > "backups/refugio_keycloak_${FECHA}.dump"
 ```
 
 ### Verificación del archivo de backup
 ```bash
-docker compose exec -T postgres pg_restore --list < "backups/tpi_negocio_${FECHA}.dump" | head -n 30
+docker compose exec -T postgres pg_restore --list < "backups/refugio_negocio_${FECHA}.dump" | head -n 30
 ```
 
 ### Restore
@@ -165,13 +165,13 @@ docker compose exec -T postgres pg_restore --list < "backups/tpi_negocio_${FECHA
 2. Restaurar con limpieza de objetos previos (`--clean --if-exists`):
 ```bash
 docker compose exec -T postgres pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
-  --clean --if-exists --no-owner < "backups/tpi_negocio_${FECHA}.dump"
+  --clean --if-exists --no-owner < "backups/refugio_negocio_${FECHA}.dump"
 ```
 3. Para restaurar `keycloak-db`, detener antes `keycloak`, restaurar el dump de Keycloak y reiniciar:
 ```bash
 docker compose stop keycloak
 docker compose exec -T keycloak-db pg_restore -U "$KC_DB_USER" -d keycloak \
-  --clean --if-exists --no-owner < "backups/tpi_keycloak_${FECHA}.dump"
+  --clean --if-exists --no-owner < "backups/refugio_keycloak_${FECHA}.dump"
 docker compose start keycloak ms-animales ms-adopciones ms-donaciones gateway
 ```
 4. Verificar `GET /actuator/health` en los servicios y confirmar que Flyway no reporta discrepancias (`ddl-auto: validate`).

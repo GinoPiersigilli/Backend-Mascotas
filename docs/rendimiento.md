@@ -21,12 +21,12 @@ docker compose ps   # esperar healthy en postgres y los 3 servicios
 
 ## 3. Siembra de 10.000 registros sintéticos
 
-Ejecutar los siguientes bloques contra el contenedor `tpi-postgres` (con el superusuario `postgres` configurado en `.env`):
+Ejecutar los siguientes bloques contra el contenedor `refugio-postgres` (con el superusuario `postgres` configurado en `.env`):
 
 ### 3.1 `animales.animal` (10.000 filas)
 
 ```bash
-docker compose exec -T postgres psql -U postgres -d tpi <<'SQL'
+docker compose exec -T postgres psql -U postgres -d refugio <<'SQL'
 INSERT INTO animales.animal (
     nombre, especie, edad_meses, tamanio, necesidades_especiales,
     apto_ninios, apto_otros_animales, requiere_espacio_exterior,
@@ -55,7 +55,7 @@ SQL
 ### 3.2 `adopciones.solicitud` (10.000 filas)
 
 ```bash
-docker compose exec -T postgres psql -U postgres -d tpi <<'SQL'
+docker compose exec -T postgres psql -U postgres -d refugio <<'SQL'
 INSERT INTO adopciones.solicitud (
     animal_id, animal_nombre, adoptante_id, estado, fecha_creacion,
     distancia_km, requiere_excepcion, distancia_no_verificada,
@@ -88,7 +88,7 @@ SQL
 ### 3.3 `donaciones.donacion` (10.000 filas)
 
 ```bash
-docker compose exec -T postgres psql -U postgres -d tpi <<'SQL'
+docker compose exec -T postgres psql -U postgres -d refugio <<'SQL'
 INSERT INTO donaciones.donacion (
     referencia, donante_id, monto, moneda, estado,
     fecha_creacion, fecha_actualizacion, link_pago, preferencia_id, pago_id, version
@@ -163,7 +163,7 @@ WHERE estado = 'CONFIRMADA';
 
 ## 5. Resultados medidos
 
-Ejecutado sobre **PostgreSQL 17 (`postgres:17-alpine`)** en Docker (`tpi-postgres`) con 10.000 filas sembradas por tabla (`ANALYZE` previo y rollback transaccional al finalizar):
+Ejecutado sobre **PostgreSQL 17 (`postgres:17-alpine`)** en Docker (`refugio-postgres`) con 10.000 filas sembradas por tabla (`ANALYZE` previo y rollback transaccional al finalizar):
 
 | Consulta | Índice evaluado | Plan sin índice | Tiempo / Buffers sin índice | Plan con índice | Tiempo / Buffers con índice | Mejora |
 |---|---|---|---|---|---|---|

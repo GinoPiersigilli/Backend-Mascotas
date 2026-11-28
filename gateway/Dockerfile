@@ -6,7 +6,7 @@ ENV MAVEN_ARGS="-Daether.connector.http.retryHandler.count=5 -Daether.connector.
 
 # 1) Copiar solo los POMs del reactor para cachear la capa de dependencias
 COPY pom.xml .
-COPY tpi-common/pom.xml tpi-common/
+COPY common/pom.xml common/
 COPY ms-animales/pom.xml ms-animales/
 COPY ms-adopciones/pom.xml ms-adopciones/
 COPY ms-donaciones/pom.xml ms-donaciones/

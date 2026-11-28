@@ -1,8 +1,8 @@
 # Despliegue integral del backend. Configuracion base: solo el Gateway (8080) y Keycloak (8180)
-# publican puertos. Los servicios y las bases quedan en la red interna tpi-net.
+# publican puertos. Los servicios y las bases quedan en la red interna refugio-net.
 # Desarrollo:  docker compose up --build -d   (aplica tambien docker-compose.override.yml)
 # Produccion:  docker compose -f docker-compose.yml up --build -d
-name: tpi-adopciones
+name: refugio-adopciones
 
 x-logging: &logging
   driver: json-file
@@ -19,7 +19,7 @@ x-keycloak-validacion: &keycloak-validacion
 services:
   postgres:
     image: postgres:17-alpine
-    container_name: tpi-postgres
+    container_name: refugio-postgres
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -31,14 +31,14 @@ services:
       DONACIONES_DB_USER: ${DONACIONES_DB_USER}
       DONACIONES_DB_PASSWORD: ${DONACIONES_DB_PASSWORD}
     volumes:
-      - tpi-postgres-data:/var/lib/postgresql/data
+      - refugio-postgres-data:/var/lib/postgresql/data
       - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 20
-    networks: [tpi-net]
+    networks: [refugio-net]
     logging: *logging
     deploy:
       resources:
@@ -48,19 +48,19 @@ services:
 
   keycloak-db:
     image: postgres:17-alpine
-    container_name: tpi-keycloak-db
+    container_name: refugio-keycloak-db
     environment:
       POSTGRES_DB: keycloak
       POSTGRES_USER: ${KC_DB_USER}
       POSTGRES_PASSWORD: ${KC_DB_PASSWORD}
     volumes:
-      - tpi-keycloak-db-data:/var/lib/postgresql/data
+      - refugio-keycloak-db-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d keycloak"]
       interval: 5s
       timeout: 5s
       retries: 20
-    networks: [tpi-net]
+    networks: [refugio-net]
     logging: *logging
     deploy:
       resources:
@@ -70,13 +70,13 @@ services:
 
   keycloak:
     image: quay.io/keycloak/keycloak:26.8.1
-    container_name: tpi-keycloak
+    container_name: refugio-keycloak
     # start-dev: HTTP sin TLS, adecuado para desarrollo local. --import-realm importa el realm
     # de /opt/keycloak/data/import si todavia no existe (no pisa cambios posteriores).
     command: ["start-dev", "--import-realm"]
     environment:
       KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak # gitleaks:allow
       KC_DB_USERNAME: ${KC_DB_USER}
       KC_DB_PASSWORD: ${KC_DB_PASSWORD}
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN}
@@ -102,7 +102,7 @@ services:
       timeout: 5s
       retries: 30
       start_period: 30s
-    networks: [tpi-net]
+    networks: [refugio-net]
     logging: *logging
     deploy:
       resources:
@@ -114,7 +114,7 @@ services:
     build:
       context: .
       dockerfile: ms-animales/Dockerfile
-    image: tpi/ms-animales:1.0.0
+    image: refugio/ms-animales:1.0.0
     container_name: ms-animales
     stop_grace_period: 30s
     environment:
@@ -133,7 +133,7 @@ services:
       timeout: 5s
       retries: 30
       start_period: 30s
-    networks: [tpi-net]
+    networks: [refugio-net]
     logging: *logging
     deploy:
       resources:
@@ -145,7 +145,7 @@ services:
     build:
       context: .
       dockerfile: ms-adopciones/Dockerfile
-    image: tpi/ms-adopciones:1.0.0
+    image: refugio/ms-adopciones:1.0.0
     container_name: ms-adopciones
     stop_grace_period: 30s
     environment:
@@ -175,7 +175,7 @@ services:
       timeout: 5s
       retries: 30
       start_period: 30s
-    networks: [tpi-net]
+    networks: [refugio-net]
     logging: *logging
     deploy:
       resources:
@@ -187,7 +187,7 @@ services:
     build:
       context: .
       dockerfile: ms-donaciones/Dockerfile
-    image: tpi/ms-donaciones:1.0.0
+    image: refugio/ms-donaciones:1.0.0
     container_name: ms-donaciones
     stop_grace_period: 30s
     environment:
@@ -210,7 +210,7 @@ services:
       timeout: 5s
       retries: 30
       start_period: 30s
-    networks: [tpi-net]
+    networks: [refugio-net]
     logging: *logging
     deploy:
       resources:
@@ -222,7 +222,7 @@ services:
     build:
       context: .
       dockerfile: gateway/Dockerfile
-    image: tpi/gateway:1.0.0
+    image: refugio/gateway:1.0.0
     container_name: gateway
     stop_grace_period: 30s
     environment:
@@ -249,7 +249,7 @@ services:
       timeout: 5s
       retries: 30
       start_period: 20s
-    networks: [tpi-net]
+    networks: [refugio-net]
     logging: *logging
     deploy:
       resources:
@@ -258,12 +258,12 @@ services:
           memory: 512M
 
 networks:
-  tpi-net:
-    name: tpi-net
+  refugio-net:
+    name: refugio-net
     driver: bridge
 
 volumes:
-  tpi-postgres-data:
-    name: tpi-postgres-data
-  tpi-keycloak-db-data:
-    name: tpi-keycloak-db-data
+  refugio-postgres-data:
+    name: refugio-postgres-data
+  refugio-keycloak-db-data:
+    name: refugio-keycloak-db-data

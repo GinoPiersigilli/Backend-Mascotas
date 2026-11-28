@@ -11,7 +11,7 @@ spring:
     virtual:
       enabled: true
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5433/tpi}
+    url: ${DB_URL:jdbc:postgresql://localhost:5433/refugio}
     username: ${DB_USER:adopciones_user}
     password: ${DB_PASSWORD:adopciones_pass}
     hikari:
@@ -92,7 +92,7 @@ springdoc:
 seguridad:
   jwt:
     clock-skew: ${JWT_CLOCK_SKEW:30s}
-    allowed-clients: ${JWT_ALLOWED_CLIENTS:tpi-client,adopciones-pkce,adopciones-service}
+    allowed-clients: ${JWT_ALLOWED_CLIENTS:adopciones-cli,adopciones-pkce,adopciones-service}
     required-audience: ${JWT_REQUIRED_AUDIENCE:}
 
 management:

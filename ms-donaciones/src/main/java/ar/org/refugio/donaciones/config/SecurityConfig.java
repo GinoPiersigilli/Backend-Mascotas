@@ -1,0 +1,41 @@
+package ar.org.refugio.donaciones.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.web.SecurityFilterChain;
+import ar.org.refugio.common.security.JsonAccessDeniedHandler;
+import ar.org.refugio.common.security.JsonAuthenticationEntryPoint;
+import ar.org.refugio.common.security.ResourceServerDefaults;
+
+import static ar.org.refugio.common.security.Roles.ADOPTANTE;
+import static ar.org.refugio.common.security.Roles.COORDINADOR;
+import static ar.org.refugio.common.security.Roles.SERVICIO;
+
+/** Matriz de permisos de ms-donaciones (CONTRATOS.md 3.5 y regla D-04). */
+@Configuration
+@EnableWebSecurity
+public class SecurityConfig {
+
+    @Bean
+    SecurityFilterChain securityFilterChain(HttpSecurity http, JsonAuthenticationEntryPoint entryPoint,
+                                            JsonAccessDeniedHandler accessDeniedHandler) throws Exception {
+        ResourceServerDefaults.aplicar(http, entryPoint, accessDeniedHandler)
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/actuator/health/**", "/actuator/info").permitAll()
+                        // Metricas Prometheus: solo en red interna y con token de servicio (ADR-04)
+                        .requestMatchers(HttpMethod.GET, "/actuator/prometheus").hasRole(SERVICIO)
+                        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                        .requestMatchers("/error").permitAll()
+                        // Webhook de Mercado Pago: publico sin JWT; valida firma HMAC-SHA256 x-signature
+                        .requestMatchers(HttpMethod.POST, "/api/donaciones/webhooks/mercadopago").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/donaciones").hasRole(ADOPTANTE)
+                        .requestMatchers(HttpMethod.GET, "/api/donaciones/total").hasRole(COORDINADOR)
+                        .requestMatchers(HttpMethod.GET, "/api/donaciones", "/api/donaciones/**")
+                        .hasAnyRole(ADOPTANTE, COORDINADOR)
+                        .anyRequest().denyAll());
+        return http.build();
+    }
+}

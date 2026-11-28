@@ -10,22 +10,22 @@ Este documento resume la postura de seguridad del backend, las fronteras de conf
 |---|---|---|
 | **Internet / Cliente → API Gateway (`:8080`)** | Única entrada pública a `/api/**` | Validación JWT (firma RS256, `iss`, `exp`/`nbf` con *clock skew* 30 s, `azp` en clientes públicos permitidos, `aud` opcional), CORS cerrado por defecto (`GATEWAY_CORS_ALLOWED_ORIGINS`), cabeceras de seguridad (`nosniff`, `DENY`, `no-referrer`, `no-store`, CSP `default-src 'none'`), límite de cuerpo (`GATEWAY_MAX_BODY_BYTES`, 1 MiB → `413`), `/internal/**` y `/actuator/prometheus` sin ruta y denegados. |
 | **Mercado Pago → Webhook (`POST /api/donaciones/webhooks/mercadopago`)** | Ruta pública explícita sin JWT | Firma HMAC-SHA256 (`x-signature` validado en tiempo constante con `MP_WEBHOOK_SECRET`, rechazado por defecto si el secreto no está configurado) + consulta autoritativa `GET /v1/payments/{id}` antes de confirmar la donación. |
-| **Red interna `tpi-net` → Microservicios (`:8081–:8083`)** | No publican puertos en `docker-compose.yml` | Defensa en profundidad (ADR-04): cada servicio revalida el JWT independientemente del Gateway, aplica RBAC fino y verifica pertenencia del recurso (IDOR → `403`). `/internal/animales/**` y `/actuator/prometheus` exigen rol `SERVICIO`. Swagger deshabilitado por defecto (`SWAGGER_ENABLED=false`). |
-| **Microservicios → PostgreSQL (`:5432`)** | Red interna `tpi-net` | Un esquema y un usuario propietario por servicio (`animales_user`, `adopciones_user`, `donaciones_user`); sin permisos cruzados (`permission denied` verificado). Flyway + `ddl-auto: validate`. |
+| **Red interna `refugio-net` → Microservicios (`:8081–:8083`)** | No publican puertos en `docker-compose.yml` | Defensa en profundidad (ADR-04): cada servicio revalida el JWT independientemente del Gateway, aplica RBAC fino y verifica pertenencia del recurso (IDOR → `403`). `/internal/animales/**` y `/actuator/prometheus` exigen rol `SERVICIO`. Swagger deshabilitado por defecto (`SWAGGER_ENABLED=false`). |
+| **Microservicios → PostgreSQL (`:5432`)** | Red interna `refugio-net` | Un esquema y un usuario propietario por servicio (`animales_user`, `adopciones_user`, `donaciones_user`); sin permisos cruzados (`permission denied` verificado). Flyway + `ddl-auto: validate`. |
 | **Contenedores** | Runtime Docker | Imágenes multi-stage `eclipse-temurin:21-jre` ejecutadas con usuario no root (`USER app`). |
 
 ---
 
 ## 2. Validación JWT: emisor, cliente (`azp`), audiencia (`aud`) y *clock skew*
 
-Implementado en `JwtTokenValidators` (`tpi-common`) y `GatewayJwtValidators` (`gateway`):
+Implementado en `JwtTokenValidators` (`common`) y `GatewayJwtValidators` (`gateway`):
 
 - **Firma y descarga de claves:** `jwk-set-uri` interno (`http://keycloak:8080/.../certs`) sin *discovery* bloqueante al arranque (ADR-05).
 - **Emisor (`iss`):** coincidencia exacta contra `KEYCLOAK_ISSUER_URI` (`http://localhost:8180/realms/adopciones` en local).
 - ***Clock skew* explícito:** `JWT_CLOCK_SKEW` fijado en **`30s`** por defecto (más estricto que los `60s` implícitos de Spring Security).
 - **Cliente autorizado (`azp`):**
-  - El Gateway restringe `GATEWAY_JWT_ALLOWED_CLIENTS` a clientes públicos de usuario (`tpi-client,adopciones-pkce`), rechazando tokens `adopciones-service` antes incluso de evaluar roles.
-  - Los microservicios restringen `JWT_ALLOWED_CLIENTS` a `tpi-client,adopciones-pkce,adopciones-service`.
+  - El Gateway restringe `GATEWAY_JWT_ALLOWED_CLIENTS` a clientes públicos de usuario (`adopciones-cli,adopciones-pkce`), rechazando tokens `adopciones-service` antes incluso de evaluar roles.
+  - Los microservicios restringen `JWT_ALLOWED_CLIENTS` a `adopciones-cli,adopciones-pkce,adopciones-service`.
 - **Audiencia (`aud`):** soportada mediante `JWT_REQUIRED_AUDIENCE` (cuando se configura un *Audience Protocol Mapper* en el realm productivo, por ejemplo `adopciones-api`).
 
 ---
@@ -56,7 +56,7 @@ Implementado en `JwtTokenValidators` (`tpi-common`) y `GatewayJwtValidators` (`g
 El entorno local de `docker-compose.yml` prioriza reproducibilidad sin certificados ni dependencias externas. Antes de exponer a Internet:
 
 1. **Keycloak en modo productivo:** reemplazar `start-dev` por `start --optimized`, terminar TLS con certificado real (`sslRequired: external` o `all`) y fijar `KC_HOSTNAME` al dominio HTTPS real.
-2. **Deshabilitar *password grant*:** eliminar/deshabilitar `tpi-client` y usar exclusivamente **`adopciones-pkce`** (*Authorization Code + PKCE S256*, ya incluido en `infra/keycloak/realm-adopciones.json`).
+2. **Deshabilitar *password grant*:** eliminar/deshabilitar `adopciones-cli` y usar exclusivamente **`adopciones-pkce`** (*Authorization Code + PKCE S256*, ya incluido en `infra/keycloak/realm-adopciones.json`).
 3. **Activar audiencia explícita:** añadir un *Audience Protocol Mapper* (`adopciones-api`) en Keycloak y definir `JWT_REQUIRED_AUDIENCE=adopciones-api` en Gateway y microservicios.
 4. **Gestión de secretos:** inyectar credenciales de BD, Keycloak y Mercado Pago desde un gestor de secretos (Vault / AWS Secrets Manager / Kubernetes Secrets), rotar `MP_WEBHOOK_SECRET` y deshabilitar `ANIMALES_DATOS_DEMO=false`.
 5. **Rate limiting en el borde:** configurar límites de tasa por IP/usuario en el ingress/reverse proxy delante del Gateway (especialmente sobre `/api/donaciones/webhooks/mercadopago` y Keycloak).

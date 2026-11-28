@@ -24,6 +24,7 @@ Registro de evoluciones aditivas y ajustes técnicos acordados sobre la versión
 | 12 | Migraciones versionadas con **Flyway** (`db/migration/V*.sql`) y `ddl-auto: validate` en ejecución, verificadas contra PostgreSQL 17 con Testcontainers | Versionado reproducible del esquema sin mutaciones implícitas de Hibernate | 10 |
 | 13 | Encabezado opcional `Idempotency-Key` en `POST /api/donaciones` (`409` si se reutiliza con distinto monto) y `solicitudId` opcional en `PUT /internal/animales/{id}/estado` | Reintentos seguros sin duplicar preferencias de pago ni fallar en transiciones repetidas | 6, 8 |
 | 14 | Endpoints operativos aditivos: `POST /api/donaciones/webhooks/mercadopago` (firma HMAC-SHA256 `x-signature`), `GET /api/solicitudes/reportes` y `POST /api/solicitudes/reconciliacion` (`COORDINADOR`), filtro `?controlVencido=true` | Confirmación asíncrona de pagos, reconciliación de ADR-06 y visibilidad operativa | 7, 8 |
+| 15 | Normalización de coordenadas Maven (`ar.org.refugio`), módulo `common`, cliente OIDC local `adopciones-cli` y recursos Docker `refugio-*` (sin alterar ninguna ruta ni payload de `/api/**`) | Nomenclatura de dominio limpia y coherente en todo el repositorio (ADR-27) | 1, 2, 3, 10, 12 |
 
 ---
 
@@ -32,16 +33,16 @@ Registro de evoluciones aditivas y ajustes técnicos acordados sobre la versión
 | Aspecto | Contrato |
 |---|---|
 | Estructura | Un único repositorio con Maven multimódulo (reactor) |
-| `groupId` | `utnfc.isi.back.tpi` |
-| Módulos | `tpi-common`, `ms-animales`, `ms-adopciones`, `ms-donaciones`, `gateway` (más la carpeta `infra/`) |
-| Paquetes base | `utnfc.isi.back.tpi.common`, `.animales`, `.adopciones`, `.donaciones`, `.gateway` |
+| `groupId` | `ar.org.refugio` |
+| Módulos | `common`, `ms-animales`, `ms-adopciones`, `ms-donaciones`, `gateway` (más la carpeta `infra/`) |
+| Paquetes base | `ar.org.refugio.common`, `.animales`, `.adopciones`, `.donaciones`, `.gateway` |
 | Java y Spring | Java 21. Spring Boot 3.5.0 con Spring Cloud 2025.0.0, que según el anuncio oficial de Spring es compatible con Boot 3.5.0 (se puede subir a un parche posterior de la misma serie). **Ojo:** desde esa versión de Spring Cloud el starter del Gateway se llama `spring-cloud-starter-gateway-server-webflux` y las propiedades empiezan con `spring.cloud.gateway.server.webflux` |
 | Capas dentro de cada servicio | `controller`, `service`, `repository`, `model`, `dto`, `exception`, `client` (llamadas a otros sistemas) |
 | Formato de datos | JSON. Fechas en formato ISO 8601. Los nombres de campos van en `camelCase` |
 | Identificador de usuario | El claim `sub` del JWT. Es el dueño de perfiles, solicitudes y donaciones |
 | Enumeraciones | En mayúsculas con guion bajo, igual que en el documento de dominio |
 
-El módulo `gateway` es reactivo (WebFlux) y **no depende de `tpi-common`**, que es para los tres servicios.
+El módulo `gateway` es reactivo (WebFlux) y **no depende de `common`**, que es para los tres servicios.
 
 ---
 
@@ -57,7 +58,7 @@ El módulo `gateway` es reactivo (WebFlux) y **no depende de `tpi-common`**, que
 | `postgres` (negocio) | 5432 | 5433 solo en desarrollo | |
 | `keycloak-db` | 5432 | No se publica | |
 
-- **Red:** una sola red llamada `tpi-net`. Los servicios se llaman por su nombre (por ejemplo `http://ms-animales:8081`).
+- **Red:** una sola red llamada `refugio-net`. Los servicios se llaman por su nombre (por ejemplo `http://ms-animales:8081`).
 - **Compose:** `docker-compose.yml` (solo Gateway y Keycloak publicados) más `docker-compose.override.yml` (puertos de desarrollo), separando configuración base y puertos de desarrollo.
 - Los puertos distintos por servicio permiten correrlos también fuera de Docker.
 
@@ -80,7 +81,7 @@ El módulo `gateway` es reactivo (WebFlux) y **no depende de `tpi-common`**, que
 |---|---|
 | Realm | `adopciones` |
 | Roles de realm | `ADOPTANTE`, `COORDINADOR`, `SERVICIO` |
-| Cliente para usuarios | `tpi-client`, público (sin secreto), con acceso directo por usuario y contraseña habilitado para poder pedir tokens desde Postman. Es una simplificación para entorno local de desarrollo y no una práctica de producción |
+| Cliente para usuarios | `adopciones-cli`, público (sin secreto), con acceso directo por usuario y contraseña habilitado para poder pedir tokens desde Postman. Es una simplificación para entorno local de desarrollo y no una práctica de producción |
 | Cliente de servicio | `adopciones-service`, confidencial, con cuenta de servicio y el rol `SERVICIO` asignado |
 | Usuarios de prueba | `adoptante1`, `adoptante2` (rol ADOPTANTE) y `coordinador1` (rol COORDINADOR) |
 | Reproducibilidad | El realm se **exporta a un archivo y se importa al arrancar Keycloak**. No debe quedar ninguna configuración manual |
@@ -124,7 +125,7 @@ El emisor (`iss`) que Keycloak escribe en el token depende de la URL con la que 
 
 ## 4. Errores y códigos HTTP
 
-Formato único, definido en `tpi-common`:
+Formato único, definido en `common`:
 
 ```json
 {
@@ -284,10 +285,10 @@ Endpoints agregados en v2: `GET /api/solicitudes/{id}/historial` (dueño o COORD
 
 | Elemento | Contrato |
 |---|---|
-| Instancia de negocio | Contenedor `postgres`, base `tpi`, un esquema por servicio: `animales`, `adopciones`, `donaciones` |
+| Instancia de negocio | Contenedor `postgres`, base `refugio`, un esquema por servicio: `animales`, `adopciones`, `donaciones` |
 | Usuarios | Uno por esquema (`animales_user`, `adopciones_user`, `donaciones_user`), con permisos solo sobre su esquema. Se crean con un script de inicialización |
 | Keycloak | Contenedor `keycloak-db` propio |
-| Volúmenes | Nombrados y descriptivos (`tpi-postgres-data`, `tpi-keycloak-db-data`) |
+| Volúmenes | Nombrados y descriptivos (`refugio-postgres-data`, `refugio-keycloak-db-data`) |
 | Esquema de tablas | Migraciones SQL versionadas con **Flyway** (`src/main/resources/db/migration/V*.sql`) y `spring.jpa.hibernate.ddl-auto: validate` en ejecución |
 | Regla | Ningún servicio accede a las tablas de otro. Para saber el estado de un animal, Adopciones lo consulta por la API interna |
 | Unicidad (R-01) | Restricción en la base de Adopciones: una sola solicitud PENDIENTE por animal y una sola activa por adoptante |
@@ -313,7 +314,7 @@ Se definen en un archivo `.env` local que **no se versiona**. Se versiona `.env.
 
 ---
 
-## 12. Contrato del JAR común (`tpi-common`)
+## 12. Contrato del JAR común (`common`)
 
 | Contiene | No contiene |
 |---|---|
@@ -331,7 +332,7 @@ Se definen en un archivo `.env` local que **no se versiona**. Se versiona `.env.
 
 ## 13. Docker
 
-- Un `Dockerfile` por servicio, con **contexto en la raíz del repositorio** y construcción en dos etapas: la primera compila todo el reactor (incluido `tpi-common`) y la segunda copia solo el JAR del servicio sobre una imagen liviana de Java 21. Así se puede levantar desde un entorno limpio, sin JARs locales.
+- Un `Dockerfile` por servicio, con **contexto en la raíz del repositorio** y construcción en dos etapas: la primera compila todo el reactor (incluido `common`) y la segunda copia solo el JAR del servicio sobre una imagen liviana de Java 21. Así se puede levantar desde un entorno limpio, sin JARs locales.
 - Se usa `eclipse-temurin` en lugar de `openjdk` (deprecada).
 - `healthcheck` en cada contenedor y `depends_on` con condición de salud (Keycloak tarda en arrancar y `depends_on` por sí solo no espera a que esté listo).
 - `.dockerignore` en la raíz.

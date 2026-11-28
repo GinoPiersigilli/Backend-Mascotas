@@ -6,7 +6,7 @@ Documento de referencia sobre la topología de contenedores, fronteras de confia
 
 ## 1. Topología de contenedores y fronteras de red
 
-En el perfil productivo base (`docker-compose.yml`), **únicamente el API Gateway (`:8080`) y Keycloak (`:8180`) publican puertos al host**. Los tres microservicios de dominio y las dos instancias PostgreSQL operan aislados dentro de la red interna `tpi-net`.
+En el perfil productivo base (`docker-compose.yml`), **únicamente el API Gateway (`:8080`) y Keycloak (`:8180`) publican puertos al host**. Los tres microservicios de dominio y las dos instancias PostgreSQL operan aislados dentro de la red interna `refugio-net`.
 
 ```mermaid
 flowchart LR
@@ -22,7 +22,7 @@ flowchart LR
         KC["keycloak :8180/:8080 (OIDC / JWT RS256)"]
     end
 
-    subgraph RedInterna["Red interna tpi-net (sin puertos publicados en prod)"]
+    subgraph RedInterna["Red interna refugio-net (sin puertos publicados en prod)"]
         ANI["ms-animales :8081 (MVC + Virtual Threads)"]
         ADO["ms-adopciones :8082 (MVC + Virtual Threads + ShedLock)"]
         DON["ms-donaciones :8083 (MVC + Virtual Threads + ShedLock)"]
@@ -57,8 +57,8 @@ flowchart LR
 
 | Módulo | Stack | Rol arquitectónico |
 |---|---|---|
-| `gateway` | WebFlux + Netty + OAuth2 Resource Server reactivo | Autenticación JWT en el borde (`iss`, `exp` skew 30 s, allowlist `azp`), CORS cerrado por defecto, cabeceras de seguridad, límite de cuerpo (`413`), generación/sanitización de `X-Correlation-ID` y ocultamiento de `/internal/**` y `/actuator/prometheus`. No depende de `tpi-common` (ADR-09). |
-| `tpi-common` | Librería JAR (`provided` deps) | Contrato unificado `ErrorResponse`, `GlobalExceptionHandler`, manejadores JSON `401`/`403`, `KeycloakRoleConverter`, `JwtTokenValidators`, `ResourceServerDefaults` y propagación de `X-Correlation-ID` en `Servlet` y `RestClient`. |
+| `gateway` | WebFlux + Netty + OAuth2 Resource Server reactivo | Autenticación JWT en el borde (`iss`, `exp` skew 30 s, allowlist `azp`), CORS cerrado por defecto, cabeceras de seguridad, límite de cuerpo (`413`), generación/sanitización de `X-Correlation-ID` y ocultamiento de `/internal/**` y `/actuator/prometheus`. No depende de `common` (ADR-09). |
+| `common` | Librería JAR (`provided` deps) | Contrato unificado `ErrorResponse`, `GlobalExceptionHandler`, manejadores JSON `401`/`403`, `KeycloakRoleConverter`, `JwtTokenValidators`, `ResourceServerDefaults` y propagación de `X-Correlation-ID` en `Servlet` y `RestClient`. |
 | `ms-animales` | Spring MVC + JPA + Flyway | Único dueño del catálogo y de la máquina de estados `EstadoAnimal` (`R-13`). Expone API pública (`/api/animales/**`) e interna idempotente (`/internal/animales/**`, restringida a `ROLE_SERVICIO`). |
 | `ms-adopciones` | Spring MVC + JPA + Flyway + Resilience4j + ShedLock | Orquesta perfiles, evaluación automática (`R-01..R-06` con Georef + Haversine), aprobación/entrega/control/devolución (`R-07..R-12`), eventos en proceso post-commit, reportes y tareas distribuidas (vencimientos, alertas de control y reconciliación con `ms-animales`). |
 | `ms-donaciones` | Spring MVC + JPA + Flyway + Resilience4j + ShedLock | Gestiona donaciones (`D-01..D-04`) con `Idempotency-Key` SHA-256, creación de preferencias Checkout Pro y triple vía idempotente de confirmación (webhook firmado HMAC-SHA256, reconciliación periódica y consulta bajo demanda). |
