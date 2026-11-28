@@ -1,250 +1,170 @@
 # Adopción Responsable — Backend de Microservicios
 
-Sistema distribuido para coordinar el ciclo completo de adopción de animales y el registro de donaciones de un refugio, construido con Java 21, Spring Boot 3.5 y Spring Cloud.
-
 [![CI](https://github.com/GinoPiersigilli/Backend-Mascotas/actions/workflows/ci.yml/badge.svg)](https://github.com/GinoPiersigilli/Backend-Mascotas/actions/workflows/ci.yml)
+[![Security](https://github.com/GinoPiersigilli/Backend-Mascotas/actions/workflows/security.yml/badge.svg)](https://github.com/GinoPiersigilli/Backend-Mascotas/actions/workflows/security.yml)
 [![Java 21](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk&logoColor=white)](https://adoptium.net/)
-[![Spring Boot 3.5](https://img.shields.io/badge/Spring%20Boot-3.5.16-6DB33F?logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
+[![Spring Boot 3.5.16](https://img.shields.io/badge/Spring%20Boot-3.5.16-6DB33F?logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
+[![Coverage 90.1%](https://img.shields.io/badge/JaCoCo%20Lines-90.1%25-brightgreen)](docs/ARQUITECTURA.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
----
-
-## 1. Qué es y qué problema resuelve
-
-Muchos refugios de animales gestionan adopciones a través de chats y planillas sueltas: no existe una fuente única de verdad sobre qué animales están disponibles, varias personas se postulan por el mismo animal al mismo tiempo, las aprobaciones se toman sin validar compatibilidad del hogar ni distancia geográfica, no hay seguimiento formal durante el período de adaptación y las donaciones quedan desvinculadas de su estado real de cobro.
-
-Este backend resuelve ese flujo aplicando reglas de negocio explícitas en cada transición de estado y registrando un historial auditable de cada decisión. Cubre cinco procesos: gestión del catálogo y ciclo de vida del animal (**P1**), presentación y evaluación de solicitudes con compatibilidad y distancia (**P2**), entrega dentro de un plazo con vencimiento automático (**P3**), seguimiento de adaptación y posibles devoluciones (**P4**), y cobro/confirmación de donaciones (**P5**).
-
-Interactúa con tres sistemas externos reales: **Keycloak** para autenticación y autorización OIDC/JWT, la **API pública Georef** (Argentina) para geolocalizar domicilios y calcular distancia al refugio, y **Mercado Pago** (Checkout Pro) para gestionar donaciones.
-
-> **Documentación técnica en [`docs/`](docs):** [análisis de dominio](docs/ANALISIS.md), [contratos de integración](docs/CONTRATOS.md), [referencia de API](docs/API.md), [decisiones arquitectónicas (ADR)](docs/ADR.md) y [patrones aplicados](docs/PATRONES.md).
+> **Executive Summary (English)**
+> Production-style distributed backend coordinating the end-to-end animal shelter adoption lifecycle and donation processing, built with **Java 21 (Virtual Threads)**, **Spring Boot 3.5.16**, **Spring Cloud Gateway (WebFlux)**, **PostgreSQL 17**, and **Keycloak 26.8 (OIDC/JWT)**.
+> Three domain-isolated microservices (`ms-animales`, `ms-adopciones`, `ms-donaciones`) own separate PostgreSQL schemas and credentials migrated via **Flyway** (`ddl-auto: validate`), behind a single reactive API Gateway enforcing strict JWT validation (`iss`, `exp` 30s clock skew, `azp` client allowlists), security headers, payload caps (`413`), and end-to-end `X-Correlation-ID` tracing.
+> Cross-service state transitions avoid 2PC and premature broker complexity through local-first optimistic locking (`@Version`), idempotent internal transitions (`solicitudId`), and **ShedLock**-coordinated background reconciliation.
+> External integrations (**Argentina Georef API** and **Mercado Pago Checkout Pro** with constant-time HMAC-SHA256 `x-signature` webhooks and `Idempotency-Key` support) are protected by **Resilience4j** circuit breakers and GET-only retries.
+> Verified continuously by **237 unit/slice tests** (**90.1%** aggregate line coverage), **ArchUnit**, **Checkstyle**, **SpotBugs**, **Testcontainers PostgreSQL 17**, an **8-container E2E smoke suite** (WireMock), and **CodeQL / Trivy / gitleaks** scans.
 
 ---
 
-## 2. Demo y Quickstart
+## Tabla de contenidos
 
-<!-- TODO: agregar GIF o capturas del flujo completo de adopción (Postman / Swagger UI / logs con X-Correlation-ID) -->
+1. [Problema y alcance de negocio](#1-problema-y-alcance-de-negocio)
+2. [Demo reproducible en 3 comandos](#2-demo-reproducible-en-3-comandos)
+3. [Arquitectura y módulos](#3-arquitectura-y-módulos)
+4. [Decisiones de ingeniería destacadas](#4-decisiones-de-ingeniería-destacadas)
+5. [Seguridad, observabilidad y rendimiento](#5-seguridad-observabilidad-y-rendimiento)
+6. [Calidad automatizada y cobertura medida](#6-calidad-automatizada-y-cobertura-medida)
+7. [Trade-offs y limitaciones conocidas](#7-trade-offs-y-limitaciones-conocidas)
+8. [Índice de documentación](#8-índice-de-documentación)
 
-Levantar el **perfil de demostración sin credenciales externas** (8 contenedores: Gateway, 3 microservicios, Keycloak, 2 instancias PostgreSQL y **WireMock** simulando Georef y Mercado Pago con los stubs de [infra/wiremock/mappings](infra/wiremock/mappings)) y recorrer el flujo completo P1–P5 en 3 comandos:
+---
+
+## 1. Problema y alcance de negocio
+
+Muchos refugios coordinan adopciones por mensajería informal y planillas aisladas: varias personas compiten simultáneamente por el mismo animal, se aprueban entregas sin verificar compatibilidad del hogar ni distancia geográfica, no hay alertas sobre seguimientos post-entrega vencidos y las donaciones quedan desvinculadas de la confirmación real del cobro.
+
+Este sistema modela cinco procesos integrados con máquinas de estados explícitas e historial inmutable de auditoría:
+- **P1 — Catálogo y disponibilidad (`ms-animales`):** alta, edición y máquina de estados (`DISPONIBLE`, `RESERVADO`, `EN_ADAPTACION`, `ADOPTADO`, `NO_DISPONIBLE`, regla `R-13`).
+- **P2 — Evaluación y decisión (`ms-adopciones`):** validación de perfil (`R-03`), unicidad concurrente por adoptante y animal (`R-01`, `R-02`), incompatibilidades duras (`R-04`) y observaciones (`R-05`), geolocalización con **API Georef** + distancia Haversine con degradación no bloqueante (`R-06`) y aprobación/rechazo con reserva coordinada (`R-07`, `R-08`).
+- **P3 — Entrega con plazo (`ms-adopciones`):** confirmación dentro de ventana configurable (`R-09`, `R-10`) y cancelación automática de reservas vencidas mediante tarea programada distribuida.
+- **P4 — Adaptación, alertas y cierre (`ms-adopciones`):** alertas automáticas de controles finales vencidos, control final conforme/desfavorable (`R-11`, `R-12`), devolución voluntaria, reportes agregados para Coordinadores y reconciliación periódica/manual contra `ms-animales`.
+- **P5 — Donaciones (`ms-donaciones`):** preferencias **Mercado Pago Checkout Pro** (`D-01..D-04`) con `Idempotency-Key` acotada por donante (`SHA-256`, `409` ante discrepancia de monto) y confirmación idempotente vía **webhook firmado HMAC-SHA256**, reconciliación programada y verificación bajo demanda.
+
+---
+
+## 2. Demo reproducible en 3 comandos
+
+El perfil `docker-compose.demo.yml` levanta los **8 contenedores** (Gateway, 3 microservicios, Keycloak, 2 instancias PostgreSQL 17 y **WireMock** simulando Georef y Mercado Pago con los stubs de [`infra/wiremock/mappings/`](infra/wiremock/mappings)) sin requerir credenciales externas ni acceso a APIs de terceros:
 
 ```bash
 cp .env.example .env
 docker compose -f docker-compose.yml -f docker-compose.demo.yml up --build -d --wait
-./scripts/prueba-humo.sh
+EXPECT_DONACIONES=true bash ./scripts/prueba-humo.sh
 ```
 
-> `--wait` espera automáticamente a que los 8 contenedores pasen a estado `healthy` (Keycloak tarda ~30–90 s en el primer arranque; sustituye de forma nativa los placeholders `${...}` del realm). En Windows puede ejecutarse con Git Bash (`bash ./scripts/prueba-humo.sh`). Para conectar contra Georef y Mercado Pago reales en desarrollo, usar `docker compose up --build -d`.
+`prueba-humo.sh` obtiene tokens reales en Keycloak (`adoptante1`, `adoptante2`, `coordinador1`), verifica propagación de `X-Correlation-ID`, recorre el ciclo P1–P5 completo, valida RBAC/IDOR (`401`/`403`/`409`), reportes e `Idempotency-Key`, y confirma la transición de donación a `CONFIRMADA`.
+
+Otros modos de ejecución (detalle completo en [`docs/OPERACION.md`](docs/OPERACION.md)):
+```bash
+# Desarrollo local (expone :8081-:8083, Postgres :5433 y activa Swagger UI)
+docker compose up --build -d --wait
+
+# Perfil productivo base (solo publica Gateway :8080 y Keycloak :8180; SWAGGER_ENABLED=false)
+docker compose -f docker-compose.yml up --build -d --wait
+```
 
 ---
 
-## 3. Arquitectura
+## 3. Arquitectura y módulos
 
-```text
-Cliente / Postman ──► Keycloak :8180 (OIDC, emite JWT con realm_access.roles)
-   │
-   └─JWT─► API Gateway :8080 (Security Filter + rutas + X-Correlation-ID)
-               ├─► ms-animales   :8081  catálogo y máquina de estados del animal
-               ├─► ms-adopciones :8082  proceso de adopción ──► ms-animales /internal (token SERVICIO)
-               │                                          └──► API Georef (HTTPS)
-               └─► ms-donaciones :8083  donaciones        ──► Mercado Pago (HTTPS)
-   PostgreSQL de negocio (esquemas animales | adopciones | donaciones, un usuario por esquema)
-   PostgreSQL de Keycloak (instancia propia)
-   tpi-common (JAR Maven): errores, excepciones, conversor de roles, correlación — usado por los 3 servicios
-```
-
-**¿Por qué microservicios?** Los dominios tienen dueños de datos, reglas y ritmos de cambio independientes: `ms-animales` protege la máquina de estados del animal (un animal existe sin solicitudes), `ms-adopciones` orquesta el flujo de evaluación, plazos e historial, y `ms-donaciones` aísla por completo la integración con el proveedor de pagos.
-
-**¿Por qué un API Gateway?** Centraliza el único punto de entrada público (`:8080`), valida el JWT en el borde, impide la exposición de rutas internas (`/internal/**`), estandariza las respuestas de error cuando un servicio aguas abajo no responde (`503`) y propaga un `X-Correlation-ID` para trazar cada petición de punta a punta.
-
-### Diagramas C4
-
-Fuentes PlantUML: [C1 — Contexto](docs/diagramas/C1-Contexto.puml), [C2 — Contenedores](docs/diagramas/C2-Contenedores.puml) y [Secuencia de aprobación](docs/diagramas/Secuencia-aprobar.puml).
-
-#### C1 — Diagrama de Contexto
-
-![C1 - Diagrama de Contexto](docs/diagramas/C1-Contexto.svg)
-
-#### C2 — Diagrama de Contenedores
+Diagramas Mermaid detallados (topología, secuencias P2–P4 y P5, pipeline CI/CD) en [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md), además de los diagramas C4 SVG en [`docs/diagramas/`](docs/diagramas):
 
 ![C2 - Diagrama de Contenedores](docs/diagramas/C2-Contenedores.svg)
 
-### Módulos y tecnologías
-
 | Módulo | Responsabilidad | Puerto |
 |---|---|---|
-| `tpi-common` | JAR compartido (no desplegable): `ErrorResponse`, excepciones de dominio, `GlobalExceptionHandler`, `KeycloakRoleConverter`, respuestas 401/403 en JSON, `ResourceServerDefaults`, filtro e interceptor de `X-Correlation-ID` | — |
-| `ms-animales` | Dueño del catálogo y de la máquina de estados del animal; valida transiciones (R-13). Expone API pública y API interna | `8081` |
-| `ms-adopciones` | Dueño del proceso de adopción: perfiles, solicitudes, evaluación (Georef), entrega, control final, historial y tarea programada de vencimientos | `8082` |
-| `ms-donaciones` | Creación de preferencias de pago y confirmación consultando Mercado Pago | `8083` |
-| `gateway` | Entrada única (Spring Cloud Gateway WebFlux), validación de JWT en el borde, enrutamiento, correlación y errores uniformes | `8080` |
+| `gateway` | Entrada pública única (Spring Cloud Gateway WebFlux), validación JWT en el borde, cabeceras de seguridad, CORS cerrado por defecto, límite de cuerpo (`413`), correlación y ocultamiento de `/internal/**` y `/actuator/prometheus`. | `8080` |
+| `ms-animales` | Dueño del catálogo y de la máquina de estados del animal (`R-13`). Expone API pública y API interna idempotente (`/internal/animales/**`, rol `SERVICIO`). | `8081` (interno) |
+| `ms-adopciones` | Perfiles, solicitudes, evaluación Georef, aprobación/entrega/control, eventos de dominio en proceso, reportes, reconciliador ADR-06 y tareas ShedLock. | `8082` (interno) |
+| `ms-donaciones` | Preferencias Checkout Pro, `Idempotency-Key`, webhook público firmado (`x-signature` HMAC-SHA256), reconciliación ShedLock y consulta bajo demanda. | `8083` (interno) |
+| `tpi-common` | Librería Maven compartida: `ErrorResponse`, `GlobalExceptionHandler`, manejadores JSON `401`/`403`, `JwtTokenValidators`, `KeycloakRoleConverter`, `ResourceServerDefaults` y correlación Servlet/`RestClient`. | — |
+| `coverage-report` | Agregador JaCoCo multi-módulo ejecutado en la fase `verify`. | — |
 
-| Tecnología | Versión | Notas |
+| Tecnología | Versión fijada | Uso |
 |---|---|---|
-| Java | 21 (`--release 21`) | Imágenes Docker basadas en Eclipse Temurin 21 |
-| Spring Boot | 3.5.16 | MVC en microservicios; WebFlux en Gateway |
-| Spring Cloud | 2025.0.3 | `spring-cloud-starter-gateway-server-webflux` |
-| springdoc-openapi | 2.8.17 | Documentación OpenAPI 3 / Swagger UI por servicio |
-| PostgreSQL | 17 (Alpine) | Instancias separadas para negocio y Keycloak |
-| Keycloak | 26.8.1 | Realm importado automáticamente desde `infra/keycloak/realm-adopciones.json` |
-| H2 | Gestionada por Boot | Modo PostgreSQL en pruebas automatizadas |
+| Java | 21 (`--release 21`, Temurin `21.0.13.1_2-jre-noble`) | Virtual threads en microservicios MVC; records e inmutabilidad |
+| Spring Boot / Cloud | `3.5.16` / `2025.0.3` | WebMVC, WebFlux Gateway, OAuth2 Resource Server, Actuator, Validation |
+| PostgreSQL + Flyway | `17-alpine` + Flyway | Instancia de negocio aislada en 3 esquemas/usuarios + instancia dedicada de Keycloak |
+| Keycloak | `26.8.1` | OIDC / JWT RS256 (`adopciones-pkce`, `adopciones-service`, `tpi-client` demo) |
+| Resilience4j + ShedLock | Gestionado por Cloud BOM + `6.3.0` | Circuit breakers, retries solo en `GET` y locks distribuidos sobre JDBC |
 
 ---
 
-## 4. Decisiones técnicas destacadas
+## 4. Decisiones de ingeniería destacadas
 
-Las 14 decisiones arquitectónicas completas están documentadas en [docs/ADR.md](docs/ADR.md). Resumen de las principales:
+Las **26 decisiones arquitectónicas (ADR-01 a ADR-26)** están indexadas y justificadas en [`docs/ADR.md`](docs/ADR.md):
 
-| Decisión | Resumen | ADR |
+| Área | Decisión implementada | Referencia |
 |---|---|---|
-| Seguridad en dos capas y token de servicio | El Gateway valida JWT y bloquea `/internal/**`; cada servicio vuelve a validar firma/roles/pertenencia. `ms-adopciones` usa `client_credentials` (rol `SERVICIO`) para llamar a `ms-animales` en lugar de reenviar el token del usuario | [ADR-04](docs/ADR.md#adr-04-seguridad-en-dos-capas-y-token-de-servicio-trusted-zone) |
-| Emisor JWT fijo (`KC_HOSTNAME`) | Fija `iss=http://localhost:8180/realms/adopciones` para tokens pedidos desde el host o la red interna, descargando JWKS por `http://keycloak:8080/.../certs` sin *discovery* bloqueante al arrancar | [ADR-05](docs/ADR.md#adr-05-emisor-del-token-fijo-con-kc_hostname) |
-| Consistencia sin transacción distribuida | Persiste y hace `flush` del cambio local antes de invocar a `ms-animales`; si la llamada remota falla, la transacción local hace *rollback*. El caso residual queda registrado en logs | [ADR-06](docs/ADR.md#adr-06-consistencia-entre-servicios-sin-transacción-distribuida) |
-| Concurrencia sin bloqueos pesimistas | Columnas de bloqueo (`animal_pendiente`, `adoptante_activo`) con `UNIQUE` compatibles con PostgreSQL/H2, combinadas con bloqueo optimista (`@Version`) | [ADR-07](docs/ADR.md#adr-07-concurrencia-columnas-de-bloqueo-con-unique--bloqueo-optimista) |
-| Esquema y usuario por servicio | Una sola instancia PostgreSQL de negocio con esquemas y credenciales aisladas (`animales`, `adopciones`, `donaciones`) y base aparte para Keycloak | [ADR-08](docs/ADR.md#adr-08-persistencia-una-instancia-esquema-y-usuario-por-servicio-keycloak-aparte) |
-| Sin Lombok; `record` para DTOs | DTOs y propiedades como `record` de Java 21; entidades con métodos de dominio explícitos en lugar de *setters* abiertos | [ADR-12](docs/ADR.md#adr-12-sin-lombok-records-para-dto) |
+| **Defensa en profundidad JWT** | Doble validación (Gateway + microservicios) con *clock skew* explícito (`30s`), allowlist de clientes (`azp`), audiencia opcional (`aud`) y token `client_credentials` (`ROLE_SERVICIO`) precalentado fuera de transacción (`ReentrantLock` + `volatile`). | [ADR-04](docs/ADR.md#adr-04-seguridad-en-dos-capas-y-token-de-servicio-trusted-zone), [ADR-15](docs/ADR.md#adr-15-renovación-de-token-de-servicio-con-reentrantlock-y-precalentamiento-fuera-de-la-transacción), [ADR-22](docs/ADR.md#adr-22-endurecimiento-de-jwt-azpaudclock-skew-probes-actuator-y-escaneo-continuo-ws-5) |
+| **Consistencia entre servicios** | `saveAndFlush` local previo al `PUT` interno idempotente (`solicitudId`) con *rollback* automático ante `409`/`503`, complementado por `ReconciliadorAdopciones` para la ventana residual post-200. | [ADR-06](docs/ADR.md#adr-06-consistencia-entre-servicios-sin-transacción-distribuida), [ADR-17](docs/ADR.md#adr-17-resolución-de-la-inconsistencia-residual-del-adr-06-estado-actual-vs-outbox-vs-saga-con-compensación), [ADR-20](docs/ADR.md#adr-20-virtual-threads-reintentos-selectivos-en-get-idempotentes-transiciones-idempotentes-en-animales-y-shedlock-jdbc), [ADR-21](docs/ADR.md#adr-21-cierre-de-brechas-operativas-y-hardening-del-gateway-ws-4) |
+| **Concurrencia e idempotencia** | `@Version` optimista + columnas `UNIQUE` condicionales (`animal_pendiente`, `adoptante_activo`, probado con hilos concurrentes: `1×200 + 1×409`) e `Idempotency-Key` con hash SHA-256 en donaciones. | [ADR-07](docs/ADR.md#adr-07-concurrencia-columnas-de-bloqueo-con-unique--bloqueo-optimista), [ADR-18](docs/ADR.md#adr-18-idempotencia-opcional-en-post-apidonaciones-con-idempotency-key-y-conflicto-409) |
+| **Resiliencia externa** | Timeouts de conexión/lectura separados, `CircuitBreaker` que ignora errores de negocio (`404`/`409`) y `Retry` únicamente sobre consultas `GET` idempotentes (nunca sobre `POST` de cobros). | [ADR-16](docs/ADR.md#adr-16-timeouts-diferenciados-y-circuit-breaker-resilience4j-en-clientes-http), [ADR-20](docs/ADR.md#adr-20-virtual-threads-reintentos-selectivos-en-get-idempotentes-transiciones-idempotentes-en-animales-y-shedlock-jdbc) |
+| **Evolución de contratos** | Esquemas versionados con Flyway, paginación SQL aditiva (`page`, `size`, `X-Total-Count`) y contratos OpenAPI 3 exportados y verificados en `docs/openapi/*.json`. | [ADR-19](docs/ADR.md#adr-19-política-de-versionado-de-la-api-rest-api), [ADR-26](docs/ADR.md#adr-26--migraciones-flyway-paginación-aditiva-y-protección-interna-de-prometheus) |
 
 ---
 
-## 5. Reglas de negocio y dónde están implementadas
+## 5. Seguridad, observabilidad y rendimiento
 
-| Regla | Descripción resumida | Implementación | Pruebas |
-|---|---|---|---|
-| **R-01** | Animal disponible y sin otra solicitud `PENDIENTE` | `SolicitudService.crear`, columnas `UNIQUE` en `Solicitud` | `FlujoAdopcionIntegrationTest.r01*`, `SolicitudRepositoryTest` |
-| **R-02** | Máximo una solicitud activa por adoptante | `SolicitudService.crear`, columna `adoptante_activo` | `r02*`, `SolicitudRepositoryTest` |
-| **R-03** | Perfil del adoptante completo antes de solicitar | `SolicitudService.crear`, `PerfilRequest` | `r03SinPerfilNoSePuedeSolicitar` |
-| **R-04** | Incompatibilidad dura (niños / otros animales) → `RECHAZADA` con traza | `EvaluadorSolicitud.incompatibilidadDura` | `EvaluadorSolicitudTest`, `r04*` |
-| **R-05** | Requiere espacio exterior sin patio → observación | `EvaluadorSolicitud.observacionesDeCompatibilidad` | `EvaluadorSolicitudTest.r05*` |
-| **R-06** | Cálculo de distancia con Georef (fallback no bloqueante si falla) | `EvaluadorSolicitud.evaluarDistancia`, `GeorefClient`, `CalculadoraDistancia` | `EvaluadorSolicitudTest.r06*`, `GeorefClientTest` |
-| **R-07** | Aprobar solo en `PENDIENTE` y reservando en `ms-animales` | `Solicitud.aprobar` + `AnimalesClient.cambiarEstado(RESERVADO)` | `r07*`, `siAnimalesNoResponde*` |
-| **R-08** | Motivo obligatorio en rechazo y justificación ante excepción | `Solicitud.verificarAprobable`, `SolicitudRequests.Motivo` | `SolicitudTest.r08*`, `r06YR08*` |
-| **R-09** | Entrega dentro del plazo (con cancelación automática al vencer) | `Solicitud.plazoEntregaVencido`, `TareaVencimientos` | `r09*` |
-| **R-10** | Confirmación de entrega fija fecha de control final | `Solicitud.confirmarEntrega` | `SolicitudTest.r10*` |
-| **R-11** | Control final habilitado recién desde la fecha pactada | `Solicitud.registrarControl` | `SolicitudTest.r11*`, flujo completo |
-| **R-12** | Control desfavorable o devolución → `REVERTIDA` y animal `DISPONIBLE` | `Solicitud.registrarControl`, `Solicitud.devolver` | `r12*` |
-| **R-13** | Un animal con adopción en curso no puede marcarse `NO_DISPONIBLE` | `Animal.marcarNoDisponible` | `AnimalTest.r13*` |
-| **D-01 a D-04** | Monto mínimo, confirmación vía Mercado Pago, idempotencia por pago y pertenencia | `DonacionService`, `Donacion`, `SecurityConfig` de donaciones | `FlujoDonacionIntegrationTest` |
+- **Modelo de amenazas STRIDE y escaneo continuo ([`docs/SEGURIDAD.md`](docs/SEGURIDAD.md)):** `.github/workflows/security.yml` ejecuta `CodeQL`, `gitleaks` sobre historial completo, `Trivy` sobre filesystem/IaC y sobre las **4 imágenes Docker**, y `dependency-review` en cada PR. Contenedores no root (`USER app`) con imágenes base fijadas y límites de CPU/memoria.
+- **Observabilidad y apagado ordenado ([`docs/OPERACION.md`](docs/OPERACION.md)):** probes `liveness`/`readiness` (`show-details: never`), `server.shutdown: graceful` (`20s`, `stop_grace_period: 30s`), logs estructurados con `X-Correlation-ID` y `/actuator/prometheus` interno protegido con `ROLE_SERVICIO` exponiendo contadores de negocio y el gauge `adopciones_solicitudes_actuales{estado="..."}` (respaldado por una única consulta `GROUP BY` cacheada).
+- **Rendimiento medido sobre PostgreSQL 17 ([`docs/rendimiento.md`](docs/rendimiento.md)):** `open-in-view: false` + `@BatchSize(50)` eliminan N+1 (`2` queries constantes en `SolicitudListarQueryCountTest`), e índices específicos logran mejoras medidas de **2.0x a 5.4x** y reducciones de **90–94%** en lectura de buffers sobre tablas de 10.000 filas (`EXPLAIN (ANALYZE, BUFFERS)`).
 
 ---
 
-## 6. Seguridad, persistencia, ejecución, pruebas y cobertura
+## 6. Calidad automatizada y cobertura medida
 
-### Seguridad
-
-- **Autenticación OIDC:** Los usuarios obtienen su JWT de Keycloak mediante el cliente público `tpi-client`. Ningún servicio maneja contraseñas.
-- **Defensa en profundidad:** El Gateway valida firma, emisor y expiración, restringiendo `/api/**` a roles `ADOPTANTE` o `COORDINADOR` y bloqueando `/internal/**`. Cada microservicio revalida el JWT y aplica autorización fina por rol y pertenencia del recurso (`403` si el recurso pertenece a otro usuario).
-- **Comunicación servicio-a-servicio:** `ms-adopciones` obtiene su propio token con `client_credentials` (cliente confidencial `adopciones-service`, rol `SERVICIO`) para operar contra `/internal/animales/**`.
-
-| Rol / Acceso | Alcance permitido |
-|---|---|
-| Sin token | `/actuator/health` (y Swagger UI directo en cada servicio si `SWAGGER_ENABLED=true`) |
-| `ADOPTANTE` | Su perfil; crear, consultar y cancelar sus solicitudes; pedir devolución; consultar animales; donar y consultar sus donaciones |
-| `COORDINADOR` | Administrar animales; listar y decidir solicitudes; consultar perfiles de postulantes; confirmar entrega y control final; consultar todas las donaciones y el total confirmado |
-| `SERVICIO` | Exclusivamente `/internal/animales/**` y lectura interna de métricas (`GET /actuator/prometheus`) |
-
-### Observabilidad y métricas
-
-- Cada microservicio (`ms-animales`, `ms-adopciones`, `ms-donaciones`) incorpora `micrometer-registry-prometheus` y expone `GET /actuator/prometheus` únicamente dentro de la red interna `tpi-net` (el API Gateway no expone ni enruta `/actuator/prometheus`, manteniendo solo `health` e `info`).
-- Coherente con la defensa en profundidad de [ADR-04](docs/ADR.md#adr-04-seguridad-en-dos-capas-y-token-de-servicio-trusted-zone), `GET /actuator/prometheus` exige un JWT válido de Keycloak con rol `SERVICIO` (`401` sin token, `403` para roles de usuario `ADOPTANTE` o `COORDINADOR`). Todas las series incluyen la etiqueta común `application` (`ms-animales`, `ms-adopciones`, `ms-donaciones`).
-- **Métricas de negocio en `ms-adopciones`:**
-  - `adopciones_solicitudes_creadas_total` (`adopciones.solicitudes.creadas`): contador de solicitudes de adopción creadas correctamente.
-  - `adopciones_solicitudes_aprobadas_total` (`adopciones.solicitudes.aprobadas`): contador de solicitudes aprobadas tras confirmar la reserva en `ms-animales`.
-- No se incluye un servidor Prometheus/Grafana en `docker-compose.yml` para mantener liviano el stack local; un scraper externo en `tpi-net` (o `curl` en desarrollo usando `docker-compose.override.yml`) solo necesita un token `client_credentials` con rol `SERVICIO` en `Authorization: Bearer <token>`.
-
-### Persistencia
-
-- Una instancia PostgreSQL 17 para negocio con un esquema y un usuario dueño por servicio ([infra/postgres/init/01-esquemas.sh](infra/postgres/init/01-esquemas.sh)): ningún servicio tiene permisos sobre las tablas de otro.
-- Esquemas versionados con **Flyway** (`src/main/resources/db/migration/V1__esquema_inicial.sql` en cada servicio) y Hibernate configurado con `ddl-auto: validate`.
-- Instancia PostgreSQL dedicada para Keycloak (`keycloak-db`).
-- Volúmenes nombrados (`tpi-postgres-data`, `tpi-keycloak-db-data`) para preservar datos entre reinicios.
-
-### Ejecución detallada
-
-**Requisitos:** JDK 21+, Maven 3.9+, Docker con Compose v2 y acceso a Internet (descarga de imágenes/dependencias, Georef y Mercado Pago).
-
-1. **Configurar variables de entorno:**
-   ```bash
-   cp .env.example .env
-   ```
-   Ajustar las contraseñas en `.env` (`ADOPCIONES_SERVICE_CLIENT_SECRET`, `DEMO_USERS_PASSWORD`, credenciales de PostgreSQL/Keycloak) y, para probar donaciones reales contra sandbox, completar `MP_ACCESS_TOKEN` con el token de una cuenta vendedora de prueba de Mercado Pago. Por defecto `PERIODO_ADAPTACION_DIAS=0` permite recorrer el flujo completo sin esperar (en operación normal usar `30`).
-
-2. **Levantar con Docker Compose:**
-   ```bash
-   # Demo completa sin credenciales externas (WireMock simula Georef y Mercado Pago; solo publica Gateway :8080 y Keycloak :8180)
-   docker compose -f docker-compose.yml -f docker-compose.demo.yml up --build -d --wait
-
-   # Desarrollo contra APIs reales (publica Gateway :8080, Keycloak :8180, servicios :8081-:8083, Postgres :5433 y activa Swagger UI)
-   docker compose up --build -d
-
-   # Verificar estado (esperar healthy en todos los contenedores)
-   docker compose ps
-
-   # Modo restringido contra APIs reales (solo publica Gateway :8080 y Keycloak :8180; Swagger deshabilitado por defecto)
-   docker compose -f docker-compose.yml up --build -d
-   ```
-
-3. **Operación y pruebas manuales:**
-   ```bash
-   # Prueba de humo end-to-end a través del Gateway
-   ./scripts/prueba-humo.sh
-
-   # Logs con formato [servicio] [X-Correlation-ID]
-   docker compose logs -f ms-adopciones
-
-   # Detener conservando volúmenes / reinicio limpio (reimporta el realm y los esquemas)
-   docker compose down
-   docker compose down -v
-   ```
-   También se incluye la colección [postman/TPI-Adopciones.postman_collection.json](postman/TPI-Adopciones.postman_collection.json) y el entorno [postman/TPI-local.postman_environment.json](postman/TPI-local.postman_environment.json) (completar `demoPassword`).
-
-4. **Ejecución local sin Docker (para desarrollo):**
-   Con `postgres` (`localhost:5433`) y `keycloak` (`localhost:8180`) activos, compilar e instalar `tpi-common` con `mvn clean install` y levantar cada servicio con `mvn -pl <modulo> spring-boot:run`.
-
-5. **Documentación OpenAPI / Swagger UI (habilitada solo en desarrollo vía `docker-compose.override.yml`, `SWAGGER_ENABLED=false` por defecto en `docker-compose.yml`):**
-   `http://localhost:8081/swagger-ui.html`, `http://localhost:8082/swagger-ui.html` y `http://localhost:8083/swagger-ui.html`.
-
-### Pruebas y cobertura
-
-Las pruebas automatizadas no requieren Docker, Keycloak ni acceso a Internet: usan H2 en modo PostgreSQL, `MockRestServiceServer` para contratos HTTP externos, `@MockitoBean` en flujos de integración, `Clock` inyectable para vencimientos y `jwt()`/`mockJwt()` de Spring Security Test.
+El proyecto incluye **Maven Wrapper** (`./mvnw` / `./mvnw.cmd`, Maven `3.9.16`) y ejecuta todas las compuertas estáticas en `./mvnw clean verify` ([ADR-23](docs/ADR.md#adr-23-compuertas-automatizadas-de-calidad-arquitectura-y-cobertura-ws-6)):
+- **Maven Enforcer:** Java `[21,22)`, Maven `>= 3.9.0` y `dependencyConvergence`.
+- **Checkstyle (`0` violaciones) + SpotBugs (`effort=Max`, `0` bugs)** + **ArchUnit (`18` reglas de arquitectura, prohibición de Lombok y `@Value`)**.
+- **JaCoCo gates bloqueantes:** `>= 80%` líneas en paquetes `*.model` y `*.service`, y `>= 85%` en `tpi-common`.
 
 ```bash
-# Compila el reactor una sola vez, ejecuta la suite sin Docker y genera reportes JaCoCo
-mvn -B clean verify
+# Suite rápida de unidad y arquitectura (@Tag("unit") / @ArchTag("unit"), ~1 min local)
+./mvnw -B test -Dgroups=unit
 
-# Ejecuta además las pruebas de integración con Testcontainers (PostgreSQL 17 + Flyway + ddl-auto: validate, requiere Docker)
-mvn -B verify -Pintegration-tests
+# Verificación completa del reactor + gates estáticos + reporte agregado JaCoCo (~2 min en CI)
+./mvnw -B clean verify
+
+# Pruebas de integración reales contra PostgreSQL 17 con Testcontainers + Flyway (~2m 15s en CI)
+./mvnw -B verify -Pintegration-tests
 ```
 
-| Módulo | Cobertura de pruebas |
-|---|---|
-| `tpi-common` | Conversor de roles de Keycloak, `GlobalExceptionHandler`, filtro de `X-Correlation-ID` |
-| `ms-animales` | Máquina de estados y R-13, repositorio JPA (H2), matriz de permisos, carga de datos demo |
-| `ms-adopciones` | Agregado `Solicitud` (R-07..R-12), `EvaluadorSolicitud` (R-04..R-06), Haversine, clientes HTTP (`AnimalesClient`, `GeorefClient`, `ServiceTokenProvider`), unicidad `UNIQUE`, flujo end-to-end por HTTP con seguridad, tolerancia a fallas y vencimientos con reloj controlado |
-| `ms-donaciones` | `MercadoPagoClient` (contratos y fallas), flujo completo D-01..D-04 |
-| `gateway` | 401/403, bloqueo de `/internal/**`, servicio caído → `503`, correlación y `404` |
+### Cobertura agregada verificada (`coverage-report/target/site/jacoco-aggregate/jacoco.csv`)
 
-Los tests de integración con Testcontainers (`*IT.java`, etiquetados `@Tag("integration")`) se excluyen por defecto para que `mvn clean test` y `mvn verify` corran sin Docker, y se activan mediante el perfil Maven `-Pintegration-tests` (`maven-failsafe-plugin`).
-
-Los reportes de cobertura de **JaCoCo** se generan localmente en `<módulo>/target/site/jacoco/index.html` y se publican automáticamente como artifact (`jacoco-reports`) en cada ejecución del workflow de GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)).
-
----
-
-## 7. Limitaciones conocidas y próximos pasos
-
-### Limitaciones actuales
-- **Cálculo de distancia:** se calcula en línea recta (Haversine) y no por distancia vial real.
-- **Webhook de Mercado Pago en entorno local:** el endpoint firmado (`POST /api/donaciones/webhooks/mercadopago`) requiere un túnel HTTPS (ej. ngrok o Cloudflare Tunnel) para recibir callbacks reales desde Mercado Pago; sin túnel, las donaciones pendientes se confirman automáticamente mediante la reconciliación programada o al consultarlas ([ADR-11](docs/ADR.md#adr-11-mercado-pago-checkout-pro-con-webhook-firmado-reconciliación-periódica-y-verificación-bajo-demanda)).
-- **Consistencia eventual acotada:** no se utiliza un broker externo ni Outbox transaccional; las desincronizaciones residuales del caso borde de [ADR-06](docs/ADR.md#adr-06-consistencia-entre-servicios-sin-transacción-distribuida) se reparan con la reconciliación periódica o manual (`POST /api/solicitudes/reconciliacion`), reportando conflictos ambiguos para intervención del Coordinador.
-- **Configuración de Keycloak local:** se utiliza `start-dev` (HTTP sin TLS) y *Resource Owner Password Grant* en `tpi-client` para facilitar pruebas locales y desde Postman.
-
-### Próximos pasos
-- Evolucionar los eventos de dominio en proceso (`ApplicationEventPublisher`) a un **Outbox transaccional** + broker si en el futuro aparecen consumidores externos a `ms-adopciones` ([ADR-17](docs/ADR.md#adr-17-estrategia-para-la-inconsistencia-residual-de-adr-06)).
-- Migrar la autenticación de usuarios a **Authorization Code + PKCE** cuando se integre un frontend, deshabilitando *password grant* y usando Keycloak en modo producción detrás de TLS.
-- Sumar trazas distribuidas (**OpenTelemetry**) sobre el `X-Correlation-ID` existente y conectar un stack de scraping/dashboards (**Prometheus + Grafana**) sobre los endpoints `/actuator/prometheus` ya expuestos.
-
-<!-- TODO: agregar enlace a despliegue en vivo o colección pública si se publica en cloud -->
+| Módulo | Tests (`verify` + `*IT`) | Líneas cubiertas | Ramas cubiertas |
+|---|---:|---:|---:|
+| `tpi-common` | 37 | 217 / 217 (**100.0%**) | 84 / 95 (**88.4%**) |
+| `ms-animales` | 49 + 1 IT | 208 / 223 (**93.3%**) | 62 / 68 (**91.2%**) |
+| `ms-adopciones` | 93 + 1 IT | 848 / 936 (**90.6%**) | 200 / 266 (**75.2%**) |
+| `ms-donaciones` | 38 + 1 IT | 397 / 460 (**86.3%**) | 112 / 176 (**63.6%**) |
+| `gateway` | 20 | 170 / 207 (**82.1%**) | 50 / 100 (**50.0%**) |
+| **Total reactor** | **237 + 3 IT (+ E2E)** | **1.840 / 2.043 (90.1%)** | **508 / 705 (72.1%)** |
 
 ---
 
-## 8. Licencia
+## 7. Trade-offs y limitaciones conocidas
 
-Distribuido bajo licencia **MIT**. Ver [LICENSE](LICENSE) para más detalles.
+- **Sin broker de mensajería externo:** para mantener una huella operativa acotada, las transiciones entre `ms-adopciones` y `ms-animales` usan coordinación síncrona idempotente más reconciliación periódica (`ReconciliadorAdopciones`) en lugar de Kafka/RabbitMQ + Outbox (diseño evolutivo documentado en [ADR-17](docs/ADR.md#adr-17-resolución-de-la-inconsistencia-residual-del-adr-06-estado-actual-vs-outbox-vs-saga-con-compensación)).
+- **Distancia en línea recta (Haversine):** `R-06` evalúa distancia geodésica sobre coordenadas de Georef en lugar de ruteo vial pago.
+- **Entorno local vs. borde productivo:** `docker-compose.yml` ejecuta Keycloak con `start-dev` (HTTP local) e incluye el cliente `tpi-client` (*password grant*) junto al cliente `adopciones-pkce` (*PKCE S256*) para facilitar pruebas automatizadas y Postman. El checklist de endurecimiento previo a producción (TLS, desactivación de `tpi-client`, `JWT_REQUIRED_AUDIENCE` y *rate limiting* en el ingress) está detallado en [`docs/SEGURIDAD.md`](docs/SEGURIDAD.md#5-checklist-obligatorio-antes-de-producción-keycloak-y-entorno).
+
+---
+
+## 8. Índice de documentación
+
+- [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md) — Topología, fronteras de red, diagramas de secuencia y CI/CD.
+- [`docs/API.md`](docs/API.md) y [`docs/openapi/`](docs/openapi) — Referencia completa de endpoints, códigos de error, webhooks y especificaciones OpenAPI 3.
+- [`docs/ADR.md`](docs/ADR.md) — Registro indexado de las 26 decisiones arquitectónicas (ADR-01 a ADR-26).
+- [`docs/SEGURIDAD.md`](docs/SEGURIDAD.md) y [`SECURITY.md`](SECURITY.md) — Modelo de amenazas STRIDE, validación JWT, gestión VEX/CVEs y reporte de vulnerabilidades.
+- [`docs/OPERACION.md`](docs/OPERACION.md) — Runbook de despliegue, probes, Prometheus, `X-Correlation-ID`, ShedLock, backups PostgreSQL y rotación de secretos.
+- [`docs/rendimiento.md`](docs/rendimiento.md) — Eliminación de N+1 y benchmark `EXPLAIN (ANALYZE, BUFFERS)` con 10.000 filas en PostgreSQL 17.
+- [`docs/PATRONES.md`](docs/PATRONES.md), [`docs/ANALISIS.md`](docs/ANALISIS.md) y [`docs/CONTRATOS.md`](docs/CONTRATOS.md) — Patrones aplicados, análisis de dominio y contratos.
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) y [`CHANGELOG.md`](CHANGELOG.md) — Guía de contribución, gates de calidad e historial de versiones.
+- [`postman/`](postman) — Colección y entorno Postman listos para importar.
+
+---
+
+## Licencia
+
+Distribuido bajo licencia **MIT**. Ver [`LICENSE`](LICENSE).

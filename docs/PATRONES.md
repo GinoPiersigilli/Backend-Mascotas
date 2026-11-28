@@ -1,51 +1,47 @@
-# Bloque F — Patrones presentes en el código
+# Patrones de Diseño y Arquitectura Aplicados
 
-Solo se listan patrones cuya **intención** se cumple en el código. Al final, los que se evaluaron y no se usan.
+Inventario de patrones cuya **intención real** se cumple en el código productivo, seguido de los patrones evaluados y descartados deliberadamente para este alcance.
 
-| Patrón | Categoría | Dónde | Problema que resuelve |
+## 1. Patrones implementados
+
+| Patrón | Categoría | Implementación en el repositorio | Problema que resuelve |
 |---|---|---|---|
-| API Gateway | Arquitectónico (microservicios) | `gateway/` | Único punto de entrada, oculta la topología, autentica en el borde |
-| Database per Service (variante esquema por servicio) | Arquitectónico | `01-esquemas.sh`, `default_schema` | Cada servicio es dueño de sus datos |
-| Access Token / Service Account | Seguridad (OAuth2) | `ServiceTokenProvider`, cliente `adopciones-service` | Llamadas internas autenticadas sin un usuario |
-| Adapter (cliente de API externa) | GoF estructural / integración | `GeorefClient`, `MercadoPagoClient`, `AnimalesClient` | Traducir un protocolo/formato ajeno al modelo y a las excepciones propias |
-| Repository | Empresarial (DDD/PoEAA) | `*Repository` (Spring Data JPA) | Acceso a datos detrás de una interfaz de colección |
-| Data Transfer Object | Empresarial (PoEAA) | `dto/*`, records | No exponer entidades; contratos HTTP estables |
-| Domain Model rico / máquina de estados | Empresarial (PoEAA, DDD) | `Animal`, `Solicitud`, `Donacion`, `EstadoAnimal`, `EstadoSolicitud` | Las reglas viven junto a los datos; no hay setters que las salteen |
-| Aggregate | DDD | `Solicitud` + `EventoSolicitud` + observaciones | Una sola raíz controla las transiciones y el historial; se guarda en cascada |
-| Optimistic Offline Lock | Empresarial (PoEAA) | `@Version` en `Animal`, `Solicitud`, `Donacion` | Evitar que dos operaciones concurrentes se pisen |
-| Template Method (de Spring) | GoF de comportamiento (uso) | `TransactionTemplate.execute(...)` en `SolicitudService`/`DonacionService` | Delimitar transacciones explícitas alrededor de llamadas remotas |
-| Chain of Responsibility (de Spring) | GoF de comportamiento (uso) | `SecurityFilterChain`, `CorrelationIdFilter`, `CorrelationIdGlobalFilter`, `CorrelationIdInterceptor` | Procesar la petición en etapas desacopladas |
-| Correlation Identifier | Integración (EIP) | `X-Correlation-ID` en Gateway, filtro e interceptor | Seguir una operación distribuida en los logs |
-| Dependency Injection | Mecanismo de Spring | constructores de todos los `@Service`, `@Bean` de `ClientesConfig` | Desacoplar creación y uso; reemplazar dependencias en pruebas |
-| Timeout + fallo rápido / degradación | Resiliencia | `ClientesConfig` (3–5 s), `EvaluadorSolicitud.evaluarDistancia` | Que una dependencia lenta no cuelgue el servicio; Georef degrada a “no verificada” |
+| **API Gateway** | Microservicios | `gateway/` (`Spring Cloud Gateway WebFlux`) | Punto único de entrada público (`:8080`), validación JWT en el borde, cabeceras de seguridad, límite de payload y bloqueo de `/internal/**` y `/actuator/prometheus`. |
+| **Database per Service** (esquema aislado) | Datos / Microservicios | `infra/postgres/init/01-esquemas.sh`, `Flyway` (`V1..V3`), `default_schema` | Aislamiento estricto por permisos SQL (`animales_user`, `adopciones_user`, `donaciones_user`) sobre una sola instancia operativa PostgreSQL 17. |
+| **Client Credentials / Token Cache** | Seguridad OAuth2 | `ServiceTokenProvider`, cliente `adopciones-service` | Autenticación máquina a máquina (`ROLE_SERVICIO`) con lectura rápida `volatile`, renovación bajo `ReentrantLock` y precalentamiento fuera de transacciones JDBC (ADR-15). |
+| **Adapter** | Estructural (GoF) / Integración | `GeorefClient`, `MercadoPagoClient`, `AnimalesClient` | Aísla el dominio de los contratos JSON y códigos HTTP de proveedores externos, traduciéndolos a modelos propios y excepciones de dominio. |
+| **Circuit Breaker** | Resiliencia | `ClientesConfig` + Resilience4j en `GeorefClient`, `AnimalesClient` y `MercadoPagoClient` | Corta llamadas rápidamente (*fail-fast*) cuando un servicio externo acumula fallas de red/5xx, sin contar errores de negocio (`404`/`409`) (ADR-16). |
+| **Retry selectivo** | Resiliencia | Resilience4j `Retry` en `GeorefClient.geolocalizar` y `MercadoPagoClient.buscarPagoAprobado` | Absorbe micro-cortes transitorios únicamente en consultas `GET` idempotentes; nunca reintenta `POST` de creación de cobros (ADR-20). |
+| **Idempotent Receiver** | Integración (EIP) | `DonacionService.crear` (`Idempotency-Key` + SHA-256), `Animal.cambiarEstadoPorProceso` (`solicitudId`), `VerificadorFirmaMercadoPago` + `uk_donacion_pago_id` | Garantiza que reintentos del cliente, de webhooks o del reconciliador no dupliquen cobros ni fallen ante transiciones ya aplicadas (ADR-18, ADR-20). |
+| **Distributed Scheduler Lock** | Concurrencia distribuida | `ShedLockConfig` (`adopciones.shedlock`, `donaciones.shedlock`) + `@SchedulerLock` | Evita ejecuciones duplicadas de tareas `@Scheduled` al escalar múltiples réplicas, usando PostgreSQL sin sumar Redis (ADR-20, ADR-21). |
+| **Domain Model rico / Máquina de estados** | Dominio (PoEAA / DDD) | `Animal`, `Solicitud`, `Donacion`, `EstadoAnimal`, `EstadoSolicitud` | Encapsula invariantes y transiciones válidas dentro de las entidades sin exponer *setters* abiertos. |
+| **Aggregate** | DDD | `Solicitud` + `EventoSolicitud` + `observaciones` (`@BatchSize(50)`) | Una única raíz controla el ciclo de vida, las columnas de unicidad y la bitácora inmutable de auditoría. |
+| **Optimistic Offline Lock** | Concurrencia (PoEAA) | `@Version` en `Animal`, `Solicitud` y `Donacion` + columnas `UNIQUE` (`animal_pendiente`, `adoptante_activo`) | Detecta modificaciones concurrentes devolviendo `409 Conflict` sin recurrir a bloqueos pesimistas largos (ADR-07). |
+| **Template Callback transaccional** | Comportamiento | `TransactionTemplate` (`tx` y `txReadOnly`) en `SolicitudService` y `DonacionService` | Delimita con precisión qué pasos corren dentro de una transacción JDBC y mantiene las lecturas HTTP externas fuera de ella. |
+| **Domain Events (en proceso)** | Dominio / Desacoplamiento | `SolicitudAprobadaEvent`, `EntregaConfirmadaEvent`, `AdopcionConfirmadaEvent`, `EventosAdopcionListener` | Publica hechos de negocio confirmados tras el `COMMIT` local sin acoplar `SolicitudService` a efectos secundarios (ADR-21). |
+| **Correlation Identifier** | Observabilidad (EIP) | `CorrelationIdGlobalFilter`, `CorrelationIdFilter`, `CorrelationIdInterceptor` | Propaga y sanitiza `X-Correlation-ID` en logs MDC y llamadas REST internas de punta a punta. |
 
-## Detalle de los principales
+---
 
-### Adapter — `GeorefClient`, `MercadoPagoClient`, `AnimalesClient`
-- **Funcionamiento:** cada clase recibe un `RestClient`, arma la petición del proveedor y devuelve tipos propios (`Coordenadas`, `Cobro`, `AnimalDto`). Traduce errores (`RestClientException`, 404, 409, 5xx, formato inesperado) a `RecursoNoEncontrado`, `Conflicto` o `ServicioNoDisponible`.
-- **Por qué:** el resto del servicio no conoce `direcciones[0].ubicacion` ni `results[].status`; un cambio del proveedor se arregla en un solo lugar y las pruebas lo verifican con `MockRestServiceServer`.
-- **Costo:** una clase más por proveedor.
-- **Cómo decirlo:** “El servicio habla con Georef a través de un adaptador que convierte su JSON en coordenadas y sus errores en nuestras excepciones; por eso el evaluador solo ve ‘coordenadas o no verificada’.”
-- **Pregunta probable:** “¿Es GoF Adapter o un simple cliente?” → Cumple la intención de Adapter (convertir una interfaz ajena a la que espera el cliente); no definimos una interfaz `Target` separada porque hay una sola implementación — si hubiera dos proveedores de pagos, extraeríamos `ProveedorPagos`.
+## 2. Notas de diseño sobre los patrones clave
 
-### Domain Model / máquina de estados — `Animal`, `Solicitud`
-- **Funcionamiento:** `Solicitud.aprobar()` verifica estado y R-08, fija fecha, cambia el estado, recalcula las columnas de bloqueo y agrega el evento. No hay `setEstado`.
-- **Alternativa:** servicio “transaction script” con entidades anémicas (más fácil de leer al principio, pero las reglas se dispersan).
-- **Pregunta probable:** “¿Por qué la regla está en la entidad y no en el servicio?” → Porque así es imposible cambiar el estado sin pasar por la regla, y se prueba sin Spring (`SolicitudTest`, `AnimalTest`).
+### Adapter + Resiliencia (`GeorefClient`, `MercadoPagoClient`, `AnimalesClient`)
+Cada cliente encapsula timeouts diferenciados (`connect-timeout` / `read-timeout`), `Retry` (solo en `GET`) y `CircuitBreaker` programático (sin proxies AOP, lo que facilita pruebas deterministas contra servidores HTTP embebidos en `ClientesResilienciaTest` y `MercadoPagoResilienciaTest`). El resto del dominio nunca ve estructuras JSON de terceros ni `RestClientException`.
 
-### Repository y DTO
-- Interfaces `JpaRepository` con consultas derivadas (`existsByAdoptanteIdAndEstadoIn`). Los controladores devuelven records `*Response` creados con `desde(entidad)`; la dirección del adoptante solo aparece en `PerfilResponse`.
+### Consistencia local-primero + Reconciliación compensatoria (`SolicitudService` + `ReconciliadorAdopciones`)
+Para coordinar `ms-adopciones` y `ms-animales` sin transacciones distribuidas 2PC ni broker externo:
+1. Se precalienta el token OAuth2 fuera de la transacción (ADR-15).
+2. Se muta `Solicitud` y se ejecuta `saveAndFlush` local para detectar colisiones `@Version` / `UNIQUE` antes de salir por red.
+3. Se invoca `PUT /internal/animales/{id}/estado` pasando `solicitudId` (idempotente). Si `ms-animales` responde `409` o `503`, la transacción local revierte automáticamente.
+4. Si ocurriera una caída exactamente entre el `200 OK` remoto y el `COMMIT` local, `ReconciliadorAdopciones` detecta y repara los desajustes seguros de forma periódica o manual (`POST /api/solicitudes/reconciliacion`).
 
-### Optimistic Lock + UNIQUE
-- `@Version` hace que un `UPDATE` con versión vieja falle → 409 (`GlobalExceptionHandler.handleConcurrencia`). Las UNIQUE de bloqueo cubren la carrera de inserción de R-01/R-02 (`SolicitudRepositoryTest`).
+---
 
-## Evaluados y NO usados
+## 3. Patrones evaluados y descartados deliberadamente
 
-| Patrón | Por qué no |
+| Patrón descartado | Motivo técnico |
 |---|---|
-| Circuit Breaker (Resilience4j) | Hay una sola dependencia síncrona crítica y timeouts cortos; un circuito abierto daría el mismo 503 sin cambiar la regla. Se agregaría si el volumen justificara cortar llamadas. |
-| Retry automático | Reintentar un `PUT` de transición sin idempotencia podría duplicar efectos; la tarea programada reintenta en la próxima ejecución. |
-| Saga orquestada con eventos | Requiere mensajería; se resolvió con orden local-primero y *rollback* (ADR-06). |
-| Strategy | Las reglas R-04/R-05/R-06 son métodos de `EvaluadorSolicitud`; una interfaz por regla no aportaba (no se intercambian en ejecución). |
-| Observer / eventos de dominio | No hay suscriptores: el historial se escribe en el mismo agregado. |
-| Factory Method (GoF) | `Solicitud.pendiente()` y `rechazadaPorIncompatibilidad()` son *static factory methods* (Effective Java), no el patrón GoF con subclases. |
+| **2PC / Transacciones distribuidas XA** | No aplicable sobre servicios REST independientes ni deseable por acoplamiento y bloqueo de recursos. |
+| **Transactional Outbox + Broker externo (Kafka / RabbitMQ)** | Sobredimensionado para el volumen operativo de un refugio y choca con la validación síncrona `R-07` al aprobar (ver análisis completo en [ADR-17](ADR.md#adr-17-resolución-de-la-inconsistencia-residual-del-adr-06-estado-actual-vs-outbox-vs-saga-con-compensación)). Si en el futuro aparecen consumidores asíncronos externos, los eventos en proceso (`ApplicationEventPublisher`) ya dejan preparado el punto de extensión. |
+| **Strategy con jerarquía de interfaces para evaluación** | Las reglas `R-04`, `R-05` y `R-06` son fijas del dominio y no se intercambian dinámicamente en tiempo de ejecución; métodos cohesivos en `EvaluadorSolicitud` resultan más simples y legibles. |
+| **Factory Method (GoF con subclases)** | `Solicitud.pendiente(...)` y `Solicitud.rechazadaPorIncompatibilidad(...)` son *static factory methods* (Effective Java) expresivos; no existen subtipos polimórficos de `Solicitud`. |
