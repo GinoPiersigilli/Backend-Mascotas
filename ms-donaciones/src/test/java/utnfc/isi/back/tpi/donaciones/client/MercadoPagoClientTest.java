@@ -1,5 +1,6 @@
 package utnfc.isi.back.tpi.donaciones.client;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
@@ -27,6 +28,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
  * Contrato con Mercado Pago segun su documentacion oficial, sin llamadas reales
  * (las pruebas automatizadas no dependen de Internet ni de credenciales).
  */
+@Tag("unit")
 class MercadoPagoClientTest {
 
     private static final String BASE = "https://api.mercadopago.com";

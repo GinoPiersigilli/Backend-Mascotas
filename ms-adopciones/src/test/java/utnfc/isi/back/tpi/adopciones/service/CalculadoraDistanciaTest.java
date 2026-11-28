@@ -1,11 +1,13 @@
 package utnfc.isi.back.tpi.adopciones.service;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import utnfc.isi.back.tpi.adopciones.client.Coordenadas;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
 
+@Tag("unit")
 class CalculadoraDistanciaTest {
 
     private static final Coordenadas REFUGIO = new Coordenadas(-31.4334, -64.1918);

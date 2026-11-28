@@ -19,7 +19,11 @@ fi
 
 GATEWAY="${GATEWAY:-http://localhost:8080}"
 KEYCLOAK="${KEYCLOAK:-http://localhost:8180}"
+EXPECT_DONACIONES="${EXPECT_DONACIONES:-false}"
 FALLOS=0
+RESP_FILE=$(mktemp)
+HDR_FILE=$(mktemp)
+trap 'rm -f "$RESP_FILE" "$HDR_FILE"' EXIT
 
 extraer_json() {
   local clave="$1"
@@ -41,13 +45,21 @@ if [ -z "${TOKEN_ADOPTANTE1:-}" ]; then
   TOKEN_COORDINADOR=$(token coordinador1)
 fi
 
-# llamar METODO RUTA TOKEN [CUERPO] -> deja el codigo en $CODIGO y el cuerpo en $CUERPO
+if [ -z "${TOKEN_ADOPTANTE1:-}" ] || [ -z "${TOKEN_ADOPTANTE2:-}" ] || [ -z "${TOKEN_COORDINADOR:-}" ]; then
+  echo "ERROR: no se pudieron obtener los tokens de Keycloak en $KEYCLOAK" >&2
+  exit 1
+fi
+
+# llamar METODO RUTA TOKEN [CUERPO] [EXTRA_HEADER] -> deja codigo en $CODIGO, cuerpo en $CUERPO y headers en $HDR_FILE
 llamar() {
-  local args=(-s -o /tmp/tpi_resp.json -w '%{http_code}' -X "$1" "$GATEWAY$2" -H "X-Correlation-ID: humo-$RANDOM")
+  local cid="humo-${RANDOM}-$$"
+  local args=(-s -D "$HDR_FILE" -o "$RESP_FILE" -w '%{http_code}' -X "$1" "$GATEWAY$2" -H "X-Correlation-ID: $cid")
   [ -n "$3" ] && args+=(-H "Authorization: Bearer $3")
   [ -n "${4:-}" ] && args+=(-H 'Content-Type: application/json' -d "$4")
+  [ -n "${5:-}" ] && args+=(-H "$5")
+  ULTIMO_CID="$cid"
   CODIGO=$(curl "${args[@]}")
-  CUERPO=$(cat /tmp/tpi_resp.json)
+  CUERPO=$(cat "$RESP_FILE")
 }
 
 campo() {
@@ -67,8 +79,14 @@ esperar() {
   if [ "$CODIGO" = "$1" ]; then echo "  OK   $2 -> $CODIGO"; else echo "  FALLO $2 -> $CODIGO (esperado $1): $CUERPO"; FALLOS=$((FALLOS+1)); fi
 }
 
-echo "== Seguridad"
+echo "== Seguridad y trazabilidad"
 llamar GET /api/animales "";                               esperar 401 "Sin token"
+if grep -qiE "^x-correlation-id:[[:space:]]*${ULTIMO_CID}[[:space:]]*$" "$HDR_FILE"; then
+  echo "  OK   X-Correlation-ID propagado en 401 ($ULTIMO_CID)"
+else
+  echo "  FALLO X-Correlation-ID ausente o distinto (esperado $ULTIMO_CID)"
+  FALLOS=$((FALLOS+1))
+fi
 llamar POST /api/animales "$TOKEN_ADOPTANTE1" '{}';         esperar 403 "Adoptante intenta dar de alta un animal"
 llamar GET "/api/animales?estado=DISPONIBLE" "$TOKEN_ADOPTANTE1"; esperar 200 "Catalogo de disponibles"
 
@@ -102,9 +120,38 @@ llamar GET "/api/animales/$ANIMAL" "$TOKEN_ADOPTANTE1"; esperar 200 "Animal fina
 llamar GET "/api/solicitudes/$SOL/historial" "$TOKEN_ADOPTANTE1"; esperar 200 "Historial con $(campo ".__len__()" 2>/dev/null) eventos"
 llamar GET "/api/solicitudes/$SOL" "$TOKEN_ADOPTANTE2"; esperar 403 "Otro adoptante no ve la solicitud ajena"
 
-echo "== P5: donaciones (requiere MP_ACCESS_TOKEN valido; sin el, 503 es el comportamiento esperado)"
+echo "== P4b: reportes de coordinador"
+llamar GET /api/solicitudes/reportes "$TOKEN_ADOPTANTE1"; esperar 403 "Adoptante no accede a reportes"
+llamar GET /api/solicitudes/reportes "$TOKEN_COORDINADOR"; esperar 200 "Reportes de adopciones"
+
+echo "== P5: donaciones (EXPECT_DONACIONES=$EXPECT_DONACIONES)"
 llamar POST /api/donaciones "$TOKEN_ADOPTANTE1" '{"monto":0.5}'; esperar 400 "D-01: monto menor al minimo"
-llamar POST /api/donaciones "$TOKEN_ADOPTANTE1" '{"monto":500}'; echo "  INFO crear donacion -> $CODIGO"
+IDEMP_KEY="humo-don-${RANDOM}-$$"
+llamar POST /api/donaciones "$TOKEN_ADOPTANTE1" '{"monto":500}' "Idempotency-Key: $IDEMP_KEY"
+if [ "$EXPECT_DONACIONES" = "true" ]; then
+  esperar 201 "Crear donacion (demo/WireMock)"
+  DON=$(campo "['id']")
+  llamar POST /api/donaciones "$TOKEN_ADOPTANTE1" '{"monto":500}' "Idempotency-Key: $IDEMP_KEY"
+  esperar 201 "Reintento idempotente con misma Idempotency-Key"
+  DON_REINTENTO=$(campo "['id']")
+  if [ "$DON" = "$DON_REINTENTO" ] && [ -n "$DON" ]; then
+    echo "  OK   Idempotency-Key devolvio la misma donacion ($DON)"
+  else
+    echo "  FALLO Idempotency-Key devolvio id=$DON_REINTENTO (esperado $DON)"
+    FALLOS=$((FALLOS+1))
+  fi
+  llamar GET "/api/donaciones/$DON" "$TOKEN_ADOPTANTE1"; esperar 200 "Consultar donacion (confirmacion via WireMock)"
+  ESTADO_DON=$(campo "['estado']")
+  if [ "$ESTADO_DON" = "CONFIRMADA" ]; then
+    echo "  OK   Donacion $DON paso a CONFIRMADA"
+  else
+    echo "  FALLO Donacion $DON en estado '$ESTADO_DON' (esperado CONFIRMADA)"
+    FALLOS=$((FALLOS+1))
+  fi
+  llamar GET "/api/donaciones/$DON" "$TOKEN_ADOPTANTE2"; esperar 403 "D-04: otro donante no ve donacion ajena"
+else
+  echo "  INFO crear donacion -> $CODIGO (usar EXPECT_DONACIONES=true con docker-compose.demo.yml)"
+fi
 llamar GET /api/donaciones/total "$TOKEN_COORDINADOR"; esperar 200 "Total confirmado"
 
 echo

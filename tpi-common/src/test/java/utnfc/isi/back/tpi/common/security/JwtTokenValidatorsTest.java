@@ -1,5 +1,6 @@
 package utnfc.isi.back.tpi.common.security;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.oauth2.core.OAuth2TokenValidator;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -10,6 +11,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+@Tag("unit")
 class JwtTokenValidatorsTest {
 
     private static final String ISSUER = "http://localhost:8180/realms/adopciones";
@@ -81,5 +83,19 @@ class JwtTokenValidatorsTest {
         // Vencido hace 45s (fuera del clock skew de 30s) -> rechazado
         Jwt fueraSkew = token(ISSUER, Instant.now().minusSeconds(45), "tpi-client", List.of("account"));
         assertThat(validator.validate(fueraSkew).hasErrors()).isTrue();
+    }
+
+    @Test
+    void aceptaParametrosOpcionalesNulosYRechazaClaimsFaltantes() {
+        OAuth2TokenValidator<Jwt> permisivo = JwtTokenValidators.crear(" ", null, null, " ");
+        Jwt sinClaimsOpcionales = token(null, Instant.now().plusSeconds(60), null, null);
+        assertThat(permisivo.validate(sinClaimsOpcionales).hasErrors()).isFalse();
+
+        OAuth2TokenValidator<Jwt> estricto = JwtTokenValidators.crear(ISSUER, Duration.ofSeconds(10),
+                List.of("tpi-client"), "adopciones-api");
+        assertThat(estricto.validate(token(ISSUER, Instant.now().plusSeconds(60), null, List.of("adopciones-api")))
+                .hasErrors()).isTrue();
+        assertThat(estricto.validate(token(ISSUER, Instant.now().plusSeconds(60), "tpi-client", null))
+                .hasErrors()).isTrue();
     }
 }

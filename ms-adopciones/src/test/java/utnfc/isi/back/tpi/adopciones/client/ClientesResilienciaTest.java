@@ -5,6 +5,7 @@ import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
 import io.github.resilience4j.retry.Retry;
 import io.github.resilience4j.retry.RetryConfig;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
@@ -20,7 +21,9 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -33,6 +36,7 @@ import static org.mockito.Mockito.when;
  * Verifica timeouts reales de lectura, apertura del circuit breaker (fail-fast sin pegarle al servidor),
  * comportamiento degradado y recuperacion a CLOSED para GeorefClient y AnimalesClient.
  */
+@Tag("unit")
 class ClientesResilienciaTest {
 
     private static RestClient restClientConTimeout(String baseUrl, Duration readTimeout) {
@@ -47,16 +51,26 @@ class ClientesResilienciaTest {
                 .failureRateThreshold(50)
                 .slidingWindowSize(2)
                 .minimumNumberOfCalls(2)
-                .waitDurationInOpenState(Duration.ofMillis(180))
+                .waitDurationInOpenState(Duration.ofMillis(100))
+                .automaticTransitionFromOpenToHalfOpenEnabled(true)
                 .permittedNumberOfCallsInHalfOpenState(1)
                 .recordExceptions(ServicioNoDisponibleException.class)
                 .build());
+    }
+
+    private static void esperarHalfOpen(CircuitBreaker cb) throws InterruptedException {
+        long limite = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+        while (cb.getState() != CircuitBreaker.State.HALF_OPEN && System.nanoTime() < limite) {
+            Thread.sleep(15);
+        }
+        assertThat(cb.getState()).isEqualTo(CircuitBreaker.State.HALF_OPEN);
     }
 
     @Test
     void georefTimeoutAbreCircuitoDegradaADistanciaNoVerificadaYSeRecupera() throws Exception {
         AtomicInteger hits = new AtomicInteger();
         AtomicBoolean lento = new AtomicBoolean(true);
+        CountDownLatch soltarLentos = new CountDownLatch(1);
 
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
@@ -64,7 +78,7 @@ class ClientesResilienciaTest {
             hits.incrementAndGet();
             if (lento.get()) {
                 try {
-                    Thread.sleep(350);
+                    soltarLentos.await(5, TimeUnit.SECONDS);
                 } catch (InterruptedException ignored) {
                     Thread.currentThread().interrupt();
                 }
@@ -81,7 +95,7 @@ class ClientesResilienciaTest {
         try {
             String baseUrl = "http://127.0.0.1:" + server.getAddress().getPort();
             CircuitBreaker cb = circuitoRapido("georef-test");
-            GeorefClient client = new GeorefClient(restClientConTimeout(baseUrl, Duration.ofMillis(120)), cb);
+            GeorefClient client = new GeorefClient(restClientConTimeout(baseUrl, Duration.ofMillis(150)), cb);
             EvaluadorSolicitud evaluador = new EvaluadorSolicitud(client,
                     new PoliticaAdopcion(-31.4334, -64.1918, 100, 7, 30));
             Perfil perfil = new Perfil("sub-1");
@@ -100,13 +114,14 @@ class ClientesResilienciaTest {
 
             // 3) Recuperacion tras waitDurationInOpenState -> HALF_OPEN -> CLOSED
             lento.set(false);
-            Thread.sleep(230);
+            esperarHalfOpen(cb);
             EvaluadorSolicitud.ResultadoDistancia recuperado = evaluador.evaluarDistancia(perfil);
             assertThat(recuperado.noVerificada()).isFalse();
             assertThat(recuperado.distanciaKm()).isNotNull();
             assertThat(cb.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
             assertThat(hits.get()).isEqualTo(3);
         } finally {
+            soltarLentos.countDown();
             server.stop(0);
         }
     }
@@ -115,6 +130,7 @@ class ClientesResilienciaTest {
     void animalesTimeoutAbreCircuitoResponde503RapidoYSeRecupera() throws Exception {
         AtomicInteger hits = new AtomicInteger();
         AtomicBoolean lento = new AtomicBoolean(true);
+        CountDownLatch soltarLentos = new CountDownLatch(1);
 
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
@@ -122,7 +138,7 @@ class ClientesResilienciaTest {
             hits.incrementAndGet();
             if (lento.get()) {
                 try {
-                    Thread.sleep(350);
+                    soltarLentos.await(5, TimeUnit.SECONDS);
                 } catch (InterruptedException ignored) {
                     Thread.currentThread().interrupt();
                 }
@@ -142,7 +158,7 @@ class ClientesResilienciaTest {
             ServiceTokenProvider tokens = mock(ServiceTokenProvider.class);
             when(tokens.obtenerToken()).thenReturn("token-servicio");
             CircuitBreaker cb = circuitoRapido("animales-test");
-            AnimalesClient client = new AnimalesClient(restClientConTimeout(baseUrl, Duration.ofMillis(120)), tokens, cb);
+            AnimalesClient client = new AnimalesClient(restClientConTimeout(baseUrl, Duration.ofMillis(150)), tokens, cb);
 
             // 1) Dos timeouts abren el circuito
             assertThatThrownBy(() -> client.obtener(1L)).isInstanceOf(ServicioNoDisponibleException.class);
@@ -156,12 +172,13 @@ class ClientesResilienciaTest {
 
             // 3) Recuperacion tras waitDurationInOpenState
             lento.set(false);
-            Thread.sleep(230);
+            esperarHalfOpen(cb);
             AnimalDto animal = client.obtener(1L);
             assertThat(animal.estado()).isEqualTo(EstadoAnimal.DISPONIBLE);
             assertThat(cb.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
             assertThat(hits.get()).isEqualTo(3);
         } finally {
+            soltarLentos.countDown();
             server.stop(0);
         }
     }

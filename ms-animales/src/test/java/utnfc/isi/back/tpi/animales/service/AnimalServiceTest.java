@@ -1,5 +1,6 @@
 package utnfc.isi.back.tpi.animales.service;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -29,6 +30,7 @@ import static org.mockito.Mockito.when;
 
 /** Pruebas unitarias de casos de uso y filtros de AnimalService. */
 @ExtendWith(MockitoExtension.class)
+@Tag("unit")
 class AnimalServiceTest {
 
     private static final Instant AHORA = Instant.parse("2026-06-01T10:00:00Z");

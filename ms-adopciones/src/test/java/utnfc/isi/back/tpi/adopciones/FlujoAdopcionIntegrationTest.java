@@ -1,6 +1,7 @@
 package utnfc.isi.back.tpi.adopciones;
 
 import com.jayway.jsonpath.JsonPath;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
@@ -59,6 +60,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
+@Tag("integration")
 class FlujoAdopcionIntegrationTest {
 
     private static final Instant FECHA_INICIAL = Instant.parse("2026-10-27T13:00:00Z");

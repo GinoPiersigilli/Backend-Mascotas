@@ -1,5 +1,6 @@
 package utnfc.isi.back.tpi.gateway;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWebTestClient;
@@ -26,6 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
         "ADOPCIONES_URL=http://127.0.0.1:1",
         "DONACIONES_URL=http://127.0.0.1:1"
 })
+@Tag("integration")
 class GatewayJwtValidatorTest {
 
     private static final String ISSUER = "http://localhost:8180/realms/adopciones";

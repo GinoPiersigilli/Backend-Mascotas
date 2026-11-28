@@ -1,5 +1,6 @@
 package utnfc.isi.back.tpi.adopciones.model;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import utnfc.isi.back.tpi.common.exception.ConflictoException;
 import utnfc.isi.back.tpi.common.exception.SolicitudInvalidaException;
@@ -11,6 +12,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** Reglas del agregado Solicitud: transiciones, R-08 a R-12, columnas de bloqueo e historial. */
+@Tag("unit")
 class SolicitudTest {
 
     private static final LocalDateTime T0 = LocalDateTime.of(2026, 10, 1, 10, 0);

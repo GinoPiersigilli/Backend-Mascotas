@@ -1,6 +1,7 @@
 package utnfc.isi.back.tpi.donaciones;
 
 import com.jayway.jsonpath.JsonPath;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,6 +39,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
+@Tag("integration")
 class DonacionIdempotenciaTest {
 
     @Autowired

@@ -1,5 +1,6 @@
 package utnfc.isi.back.tpi.adopciones.service;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import utnfc.isi.back.tpi.adopciones.client.AnimalDto;
 import utnfc.isi.back.tpi.adopciones.client.Coordenadas;
@@ -19,6 +20,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /** R-04, R-05 y R-06 con Georef reemplazado por un doble de prueba (sin Internet). */
+@Tag("unit")
 class EvaluadorSolicitudTest {
 
     private static final PoliticaAdopcion POLITICA = new PoliticaAdopcion(-31.4334, -64.1918, 100, 7, 30);
