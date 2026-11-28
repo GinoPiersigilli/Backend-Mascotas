@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWebTestClient;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.core.env.Environment;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.TestPropertySource;
@@ -34,6 +35,8 @@ class GatewayHardeningTest {
     private WebTestClient client;
     @Autowired
     private GatewayHardeningProperties props;
+    @Autowired
+    private Environment env;
 
     private WebTestClient con(String rol) {
         return client.mutateWith(mockJwt().jwt(j -> j.subject("u-" + rol))
@@ -42,6 +45,9 @@ class GatewayHardeningTest {
 
     @Test
     void incluyeCabecerasDeSeguridadEnLasRespuestas() {
+        assertThat(env.getProperty("server.shutdown")).isEqualTo("graceful");
+        assertThat(env.getProperty("spring.lifecycle.timeout-per-shutdown-phase")).isEqualTo("20s");
+
         client.get().uri("/actuator/health").exchange()
                 .expectStatus().isOk()
                 .expectHeader().valueEquals("X-Content-Type-Options", "nosniff")

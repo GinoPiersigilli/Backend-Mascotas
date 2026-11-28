@@ -19,3 +19,5 @@ adopciones:
   tareas:
     # En las pruebas la tarea se invoca a mano para controlar el momento
     habilitadas: false
+  metricas:
+    cache-ttl: 0s

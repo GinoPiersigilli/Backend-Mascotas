@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.actuate.observability.AutoConfigureObservability;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.core.env.Environment;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.ActiveProfiles;
@@ -58,6 +59,9 @@ class AdopcionesMetricasTest {
     private MockMvc mvc;
 
     @Autowired
+    private Environment env;
+
+    @Autowired
     private MeterRegistry meterRegistry;
 
     @Autowired
@@ -88,6 +92,9 @@ class AdopcionesMetricasTest {
 
     @Test
     void actuatorPrometheusRequiereRolServicio() throws Exception {
+        assertThat(env.getProperty("server.shutdown")).isEqualTo("graceful");
+        assertThat(env.getProperty("spring.lifecycle.timeout-per-shutdown-phase")).isEqualTo("20s");
+
         mvc.perform(get("/actuator/prometheus")).andExpect(status().isUnauthorized());
         mvc.perform(get("/actuator/prometheus").with(con("ana", "ADOPTANTE"))).andExpect(status().isForbidden());
         mvc.perform(get("/actuator/prometheus").with(con("coord-1", "COORDINADOR"))).andExpect(status().isForbidden());
@@ -139,10 +146,18 @@ class AdopcionesMetricasTest {
         assertThat(meterRegistry.counter("adopciones.solicitudes.creadas").count()).isEqualTo(creadasAntes + 2.0);
         assertThat(meterRegistry.counter("adopciones.solicitudes.aprobadas").count()).isEqualTo(aprobadasAntes + 1.0);
 
-        // El endpoint Prometheus expone ambas metricas de negocio en formato scrape
+        // El endpoint Prometheus expone contadores y gauges por estado actualizados
+        assertThat(meterRegistry.find("adopciones.solicitudes.actuales")
+                .tag("estado", "APROBADA").gauge().value()).isEqualTo(1.0);
+        assertThat(meterRegistry.find("adopciones.solicitudes.actuales")
+                .tag("estado", "PENDIENTE").gauge().value()).isEqualTo(1.0);
+
         mvc.perform(get("/actuator/prometheus").with(con("prometheus", "SERVICIO")))
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("adopciones_solicitudes_creadas_total")))
-                .andExpect(content().string(containsString("adopciones_solicitudes_aprobadas_total")));
+                .andExpect(content().string(containsString("adopciones_solicitudes_aprobadas_total")))
+                .andExpect(content().string(containsString("adopciones_solicitudes_actuales")))
+                .andExpect(content().string(containsString("estado=\"APROBADA\"")))
+                .andExpect(content().string(containsString("estado=\"PENDIENTE\"")));
     }
 }

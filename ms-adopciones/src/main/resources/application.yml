@@ -1,9 +1,12 @@
 server:
   port: 8082
+  shutdown: graceful
 
 spring:
   application:
     name: ms-adopciones
+  lifecycle:
+    timeout-per-shutdown-phase: ${SHUTDOWN_TIMEOUT:20s}
   threads:
     virtual:
       enabled: true
@@ -77,6 +80,8 @@ adopciones:
     intervalo-ms: ${VENCIMIENTOS_INTERVALO_MS:300000}
     controles-intervalo-ms: ${CONTROLES_VENCIDOS_INTERVALO_MS:300000}
     reconciliacion-intervalo-ms: ${RECONCILIACION_INTERVALO_MS:600000}
+  metricas:
+    cache-ttl: ${ADOPCIONES_METRICAS_CACHE_TTL:5s}
 
 springdoc:
   api-docs:

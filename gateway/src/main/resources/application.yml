@@ -1,9 +1,12 @@
 server:
   port: 8080
+  shutdown: graceful
 
 spring:
   application:
     name: gateway
+  lifecycle:
+    timeout-per-shutdown-phase: ${SHUTDOWN_TIMEOUT:20s}
   http:
     codecs:
       max-in-memory-size: ${GATEWAY_MAX_BODY_BYTES:1048576}

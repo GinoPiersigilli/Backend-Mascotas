@@ -1,9 +1,12 @@
 server:
   port: 8081
+  shutdown: graceful
 
 spring:
   application:
     name: ms-animales
+  lifecycle:
+    timeout-per-shutdown-phase: ${SHUTDOWN_TIMEOUT:20s}
   threads:
     virtual:
       enabled: true
