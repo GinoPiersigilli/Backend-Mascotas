@@ -2,6 +2,7 @@
 # El contexto de build es la RAIZ del repositorio (ver docker-compose.yml).
 FROM maven:3.9.16-eclipse-temurin-21 AS build
 WORKDIR /workspace
+ENV MAVEN_ARGS="-Daether.connector.http.retryHandler.count=5 -Daether.connector.http.retryHandler.requestSentEnabled=true"
 
 # 1) Copiar solo los POMs del reactor para cachear la capa de dependencias
 COPY pom.xml .

@@ -118,10 +118,12 @@ jobs:
         run: cp .env.example .env
 
       - name: Start full stack with WireMock demo profile
+        env:
+          COMPOSE_PARALLEL_LIMIT: "2"
         run: docker compose -f docker-compose.yml -f docker-compose.demo.yml up --build -d --wait
 
       - name: Run end-to-end smoke verification (P1-P5)
-        run: EXPECT_DONACIONES=true ./scripts/prueba-humo.sh
+        run: EXPECT_DONACIONES=true bash ./scripts/prueba-humo.sh
 
       - name: Dump container logs on failure
         if: failure()
