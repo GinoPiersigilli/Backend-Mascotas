@@ -234,3 +234,12 @@ Formato: contexto → alternativas → decisión → consecuencias → evidencia
   - Exponer el gauge `adopciones.solicitudes.actuales{estado="..."}` en `ms-adopciones` respaldado por una única consulta `GROUP BY` compartida por los 7 estados con caché configurable (`adopciones.metricas.cache-ttl=5s`, `0s` en pruebas) y degradación segura a `NaN` si la base no responde.
   - Documentar despliegue, probes, scraping Prometheus interno, troubleshooting con `X-Correlation-ID`, ShedLock, backup/restore de PostgreSQL y rotación de secretos en `docs/OPERACION.md`.
 - **Evidencia:** `*/src/main/resources/application.yml`, `docker-compose.yml`, `MetricasSolicitudes.java`, `DonacionService.java`, `MercadoPagoWebhookController.java`, `*MetricasTest.java`, `docs/OPERACION.md`.
+
+## ADR-25 — Fijación de imágenes base, metadatos OCI, límites de recursos y pipeline CI/CD completo (WS-9)
+- **Contexto:** los Dockerfiles usaban etiquetas flotantes (`maven:3.9-eclipse-temurin-21`, `eclipse-temurin:21-jre`) sin metadatos OCI; `docker-compose.yml` no acotaba CPU/memoria; y `.github/workflows/ci.yml` solo ejecutaba `mvn verify` sin Maven Wrapper, sin las pruebas Testcontainers (`-Pintegration-tests`), sin la verificación E2E del stack ni publicación automatizada de artefactos al etiquetar versiones.
+- **Decisión:**
+  - Fijar versiones exactas (`maven:3.9.16-eclipse-temurin-21` y `eclipse-temurin:21.0.13.1_2-jre-noble`), etiquetas `org.opencontainers.image.*` (`IMAGE_VERSION`, `VCS_REF`) y `.dockerignore` ajustado para no invalidar capas al editar documentación o scripts.
+  - Declarar límites explícitos `deploy.resources.limits` (`cpus`, `memory`) en todos los contenedores de `docker-compose.yml` y `docker-compose.demo.yml`.
+  - Restringir Dependabot (`.github/dependabot.yml`) para ignorar saltos *major* fuera de contrato (Java > 21, Spring Boot > 3.5).
+  - Estructurar `.github/workflows/ci.yml` con permisos mínimos (`contents: read`), cancelación concurrente solo en PRs, `./mvnw` con reintentos de red y caché Maven con `restore-keys`, cuatro jobs (`verify` con tabla JaCoCo en Step Summary, `integration-tests` con PostgreSQL 17 Testcontainers, `e2e-demo` con Docker Compose + Keycloak + WireMock + `prueba-humo.sh`, y `publish-release` en tags `v*` publicando las 4 imágenes en `ghcr.io` y el GitHub Release con los contratos OpenAPI).
+- **Evidencia:** `*/Dockerfile`, `.dockerignore`, `docker-compose.yml`, `docker-compose.demo.yml`, `.github/workflows/ci.yml`, `.github/workflows/security.yml`, `.github/dependabot.yml`.

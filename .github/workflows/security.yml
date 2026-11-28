@@ -32,7 +32,14 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-          cache: maven
+
+      - name: Cache Maven dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml', '.mvn/wrapper/maven-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-m2-
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
@@ -41,7 +48,7 @@ jobs:
           queries: security-extended
 
       - name: Build for CodeQL analysis
-        run: mvn -B -DskipTests compile
+        run: ./mvnw -B -ntp -Daether.connector.http.retryHandler.count=5 -DskipTests compile
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
