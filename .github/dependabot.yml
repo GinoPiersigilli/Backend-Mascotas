@@ -9,6 +9,16 @@ updates:
     labels:
       - dependencies
       - maven
+    # CONTRATOS.md y maven-enforcer-plugin fijan Java 21 y la serie Spring Boot 3.5.x
+    ignore:
+      - dependency-name: "org.springframework.boot:*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "org.springframework.cloud:*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "org.springdoc:*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "net.javacrumbs.shedlock:*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: "/"
@@ -28,6 +38,11 @@ updates:
     labels:
       - dependencies
       - docker
+    ignore:
+      - dependency-name: "eclipse-temurin"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "maven"
+        versions: ["*-eclipse-temurin-22*", "*-eclipse-temurin-23*", "*-eclipse-temurin-24*", "*-eclipse-temurin-25*", "*-eclipse-temurin-26*"]
 
   - package-ecosystem: docker
     directory: "/ms-adopciones"
@@ -37,6 +52,11 @@ updates:
     labels:
       - dependencies
       - docker
+    ignore:
+      - dependency-name: "eclipse-temurin"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "maven"
+        versions: ["*-eclipse-temurin-22*", "*-eclipse-temurin-23*", "*-eclipse-temurin-24*", "*-eclipse-temurin-25*", "*-eclipse-temurin-26*"]
 
   - package-ecosystem: docker
     directory: "/ms-donaciones"
@@ -46,6 +66,11 @@ updates:
     labels:
       - dependencies
       - docker
+    ignore:
+      - dependency-name: "eclipse-temurin"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "maven"
+        versions: ["*-eclipse-temurin-22*", "*-eclipse-temurin-23*", "*-eclipse-temurin-24*", "*-eclipse-temurin-25*", "*-eclipse-temurin-26*"]
 
   - package-ecosystem: docker
     directory: "/gateway"
@@ -55,3 +80,8 @@ updates:
     labels:
       - dependencies
       - docker
+    ignore:
+      - dependency-name: "eclipse-temurin"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "maven"
+        versions: ["*-eclipse-temurin-22*", "*-eclipse-temurin-23*", "*-eclipse-temurin-24*", "*-eclipse-temurin-25*", "*-eclipse-temurin-26*"]

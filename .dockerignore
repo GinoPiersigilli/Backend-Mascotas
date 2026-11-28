@@ -1,9 +1,17 @@
 **/target
 .git
+.github
+.mvn
 .idea
 .vscode
 .env
 *.iml
+*.md
+config
+infra
 logs
 docs
 postman
+scripts
+mvnw
+mvnw.cmd

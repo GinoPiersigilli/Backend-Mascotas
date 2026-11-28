@@ -3,32 +3,186 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
+    branches: [main]
 
 permissions:
   contents: read
 
-jobs:
-  build-and-test:
-    runs-on: ubuntu-latest
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+env:
+  MAVEN_ARGS_CI: -B -ntp -Daether.connector.http.retryHandler.count=5 -Dhttp.keepAlive=false
+
+jobs:
+  verify:
+    name: Build, Static Gates & Coverage
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
-          cache: maven
 
-      - name: Build, test and generate JaCoCo reports
-        run: mvn -B verify
+      - name: Cache Maven dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml', '.mvn/wrapper/maven-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-m2-
+
+      - name: Run Enforcer, Tests, ArchUnit, Checkstyle, SpotBugs & JaCoCo
+        run: ./mvnw $MAVEN_ARGS_CI clean verify
+
+      - name: Publish JaCoCo summary to Step Summary
+        run: |
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import csv
+          from collections import defaultdict
+
+          csv_path = "coverage-report/target/site/jacoco-aggregate/jacoco.csv"
+          groups = defaultdict(lambda: [0, 0, 0, 0])
+          with open(csv_path, newline="", encoding="utf-8") as f:
+              for row in csv.DictReader(f):
+                  mod = ".".join(row["PACKAGE"].split(".")[:5])
+                  g = groups[mod]
+                  g[0] += int(row["LINE_COVERED"])
+                  g[1] += int(row["LINE_MISSED"]) + int(row["LINE_COVERED"])
+                  g[2] += int(row["BRANCH_COVERED"])
+                  g[3] += int(row["BRANCH_MISSED"]) + int(row["BRANCH_COVERED"])
+
+          print("### Aggregate JaCoCo Coverage")
+          print("| Module | Lines | Branches |")
+          print("|---|---|---|")
+          tlc = tlt = tbc = tbt = 0
+          for mod, (lc, lt, bc, bt) in sorted(groups.items()):
+              tlc += lc; tlt += lt; tbc += bc; tbt += bt
+              lp = (100.0 * lc / lt) if lt else 0.0
+              bp = (100.0 * bc / bt) if bt else 0.0
+              print(f"| `{mod}` | {lc}/{lt} ({lp:.1f}%) | {bc}/{bt} ({bp:.1f}%) |")
+          print(f"| **Total** | **{tlc}/{tlt} ({100.0*tlc/tlt:.1f}%)** | **{tbc}/{tbt} ({100.0*tbc/tbt:.1f}%)** |")
+          PY
 
       - name: Upload JaCoCo coverage reports
         uses: actions/upload-artifact@v4
         with:
           name: jacoco-reports
-          path: "**/target/site/jacoco/**"
+          path: |
+            coverage-report/target/site/jacoco-aggregate/**
+            */target/site/jacoco/**
+          retention-days: 14
           if-no-files-found: error
+
+  integration-tests:
+    name: Integration Tests (PostgreSQL 17 Testcontainers)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Cache Maven dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml', '.mvn/wrapper/maven-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-m2-
+
+      - name: Run Flyway & PostgreSQL 17 integration suite (*IT)
+        run: >-
+          ./mvnw $MAVEN_ARGS_CI verify -Pintegration-tests
+          -Dsurefire.skip=true -Djacoco.skip=true -Dcheckstyle.skip=true -Dspotbugs.skip=true
+
+  e2e-demo:
+    name: E2E Smoke Suite (Docker Compose + Keycloak + WireMock)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare demo environment
+        run: cp .env.example .env
+
+      - name: Start full stack with WireMock demo profile
+        env:
+          COMPOSE_PARALLEL_LIMIT: "2"
+        run: docker compose -f docker-compose.yml -f docker-compose.demo.yml up --build -d --wait
+
+      - name: Run end-to-end smoke verification (P1-P5)
+        run: EXPECT_DONACIONES=true bash ./scripts/prueba-humo.sh
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.demo.yml ps
+          docker compose -f docker-compose.yml -f docker-compose.demo.yml logs --no-color --tail=150
+
+      - name: Tear down stack and volumes
+        if: always()
+        run: docker compose -f docker-compose.yml -f docker-compose.demo.yml down -v
+
+  publish-release:
+    name: Publish GHCR Images & Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [verify, integration-tests, e2e-demo]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push service images to GHCR
+        run: |
+          REPO_LC=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          for SVC in ms-animales ms-adopciones ms-donaciones gateway; do
+            docker buildx build \
+              --file "${SVC}/Dockerfile" \
+              --build-arg IMAGE_VERSION="${VERSION}" \
+              --build-arg VCS_REF="${GITHUB_SHA}" \
+              --tag "ghcr.io/${REPO_LC}/${SVC}:${VERSION}" \
+              --tag "ghcr.io/${REPO_LC}/${SVC}:latest" \
+              --cache-from type=gha,scope="${SVC}" \
+              --cache-to type=gha,mode=max,scope="${SVC}" \
+              --push \
+              .
+          done
+
+      - name: Create GitHub Release with OpenAPI specs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            docs/openapi/*.json \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes \
+            --verify-tag
