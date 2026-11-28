@@ -1,6 +1,7 @@
 package utnfc.isi.back.tpi.adopciones.service;
 
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import utnfc.isi.back.tpi.common.exception.ServicioNoDisponibleException;
 
@@ -15,6 +16,7 @@ import static org.mockito.Mockito.when;
  * Verifica que TareaVencimientos aisle errores por solicitud (un fallo no aborta el lote)
  * y registre las metricas de procesadas y fallidas.
  */
+@Tag("unit")
 class TareaVencimientosTest {
 
     @Test

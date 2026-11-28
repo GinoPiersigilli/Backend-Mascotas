@@ -1,5 +1,6 @@
 package utnfc.isi.back.tpi.animales;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.actuate.observability.AutoConfigureObservability;
@@ -21,6 +22,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @AutoConfigureObservability
 @ActiveProfiles("test")
+@Tag("integration")
 class AnimalesMetricasTest {
 
     @Autowired

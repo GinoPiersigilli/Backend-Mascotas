@@ -1,6 +1,7 @@
 package utnfc.isi.back.tpi.gateway;
 
 import com.sun.net.httpserver.HttpServer;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -31,6 +32,7 @@ import static org.springframework.security.test.web.reactive.server.SecurityMock
 @SpringBootTest(classes = GatewayApplication.class)
 @AutoConfigureWebTestClient
 @ExtendWith(OutputCaptureExtension.class)
+@Tag("integration")
 class GatewayCorrelationTest {
 
     private static HttpServer backendSimulado;

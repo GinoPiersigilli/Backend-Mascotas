@@ -1,5 +1,6 @@
 package utnfc.isi.back.tpi.animales.service;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,6 +31,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @SpringBootTest
 @ActiveProfiles("test")
+@Tag("integration")
 class AnimalServiceClockTest {
 
     private static final Instant T0 = Instant.parse("2026-08-10T09:00:00Z");

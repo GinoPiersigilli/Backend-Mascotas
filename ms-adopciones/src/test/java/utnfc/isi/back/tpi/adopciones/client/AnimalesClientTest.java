@@ -1,5 +1,6 @@
 package utnfc.isi.back.tpi.adopciones.client;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
@@ -29,6 +30,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 /** Contrato HTTP con la API interna de ms-animales y traduccion de errores. */
+@Tag("unit")
 class AnimalesClientTest {
 
     private static final String BASE = "http://ms-animales:8081";

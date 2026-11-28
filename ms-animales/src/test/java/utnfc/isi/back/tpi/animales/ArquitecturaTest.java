@@ -2,6 +2,7 @@ package utnfc.isi.back.tpi.animales;
 
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
+import com.tngtech.archunit.junit.ArchTag;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
 
@@ -11,6 +12,7 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
  * Reglas de arquitectura verificadas automaticamente en ms-animales (WS-6).
  */
 @AnalyzeClasses(packages = "utnfc.isi.back.tpi.animales", importOptions = ImportOption.DoNotIncludeTests.class)
+@ArchTag("unit")
 class ArquitecturaTest {
 
     @ArchTest

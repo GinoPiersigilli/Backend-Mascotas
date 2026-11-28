@@ -1,5 +1,6 @@
 package utnfc.isi.back.tpi.animales;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -12,6 +13,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /** El contexto completo arranca (seguridad, JPA, OpenAPI, JAR comun) y carga los datos de demostracion. */
 @SpringBootTest(properties = "animales.datos-demo=true")
 @ActiveProfiles("test")
+@Tag("integration")
 class AnimalesApplicationTest {
 
     @Autowired

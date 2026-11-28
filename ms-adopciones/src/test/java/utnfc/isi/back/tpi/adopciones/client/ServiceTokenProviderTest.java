@@ -1,5 +1,6 @@
 package utnfc.isi.back.tpi.adopciones.client;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
@@ -34,6 +35,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 /** Client credentials contra Keycloak: cache sin lock, renovacion al vencer, concurrencia y fallas. */
+@Tag("unit")
 class ServiceTokenProviderTest {
 
     private static final String TOKEN_URI = "http://keycloak:8080/realms/adopciones/protocol/openid-connect/token";

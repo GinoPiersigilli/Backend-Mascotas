@@ -1,5 +1,6 @@
 package utnfc.isi.back.tpi.common.security;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.authentication.AbstractAuthenticationToken;
 import org.springframework.security.core.GrantedAuthority;
@@ -11,6 +12,7 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+@Tag("unit")
 class KeycloakRoleConverterTest {
 
     private final KeycloakRoleConverter converter = new KeycloakRoleConverter();

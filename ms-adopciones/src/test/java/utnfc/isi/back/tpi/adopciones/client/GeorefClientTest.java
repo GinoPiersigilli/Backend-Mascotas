@@ -1,5 +1,6 @@
 package utnfc.isi.back.tpi.adopciones.client;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
@@ -19,6 +20,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 /**
  * Contrato con Georef usando respuestas grabadas de la API real (27/10/2026), sin Internet.
  */
+@Tag("unit")
 class GeorefClientTest {
 
     private static final String BASE = "https://apis.datos.gob.ar/georef/api/v2.0";
