@@ -1,6 +1,6 @@
 # Construccion en dos etapas con cache de dependencias Maven (BuildKit) e imagenes fijadas por version.
 # El contexto de build es la RAIZ del repositorio (ver docker-compose.yml).
-FROM maven:3.9.16-eclipse-temurin-21 AS build
+FROM maven:3.9-eclipse-temurin-26 AS build
 WORKDIR /workspace
 ENV MAVEN_ARGS="-Daether.connector.http.retryHandler.count=5 -Daether.connector.http.retryHandler.requestSentEnabled=true"
 
