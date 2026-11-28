@@ -1,10 +1,13 @@
-# Auditoría Técnica de Portfolio — `tpi-backend-2026`
+# Auditoría Técnica y Re-evaluación de Portfolio — `refugio-animales-backend`
 
-- **Fecha de auditoría:** 2026-11-27
-- **Commit auditado (`main`):** `6b006d1` (PR #12 mergeado)
-- **Entorno detectado localmente:** Maven 3.9.16, JDK 21.0.12 (y JRE 1.8 en `PATH`, Maven usa JDK 21), Docker 29.9.3
-- **Evaluador:** Staff Backend Engineer (criterio de contratación junior/semi-senior, rúbrica de 100 puntos)
-- **Alcance:** Fase 1 (solo lectura del código, configuración, Docker, CI, infra, scripts, Postman, docs e historial git; **sin cambios de código**).
+> **Estado actual (Fase 3 — Re-evaluación sobre `main` `a8fb564`, 2026-11-28): `95.0 / 100`** (evolucionado desde **`69.0 / 100`** en Fase 1 tras completar WS-0 a WS-11 con los 20 hallazgos `H-01..H-20` cerrados y verificados en CI). Saltar directo a la [Re-evaluación Final (Fase 3)](#fase-3--re-evaluación-final-post-remediación-ws-0-a-ws-11).
+
+- **Fecha de auditoría inicial (Fase 1):** 2026-11-27
+- **Commit auditado en Fase 1 (`main`):** `6b006d1` (PR #12 mergeado)
+- **Commit re-evaluado en Fase 3 (`main`):** `a8fb564` (PR #42 mergeado — WS-0..WS-11 completos)
+- **Entorno detectado localmente:** Maven 3.9.16 (`./mvnw`), JDK 21.0.12, Docker 29.9.3
+- **Evaluador:** Staff Backend Engineer (rúbrica estricta de 100 puntos)
+- **Nota histórica:** las secciones `0` a `e` preservan intacta la fotografía de línea base de Fase 1 (incluyendo los nombres previos a WS-11); la sección final documenta la medición posterior a todos los workstreams.
 
 ---
 
@@ -200,3 +203,65 @@ El estado real de `main` (`6b006d1`) **difiere sustancialmente** de la línea ba
    - ¿Incluimos **F4** (reporte de conteo por estado y tiempo promedio de resolución) y **F5** (eventos de dominio con `ApplicationEventPublisher` y listener de log estructurado)?
    - ¿Aprobás ejecutar **WS-11** (renombrar `tpi-common` → `common`, paquetes, volúmenes, contenedores y archivos `TPI-*`), o preferís conservar el namespace actual para no cambiar nombres ya consolidados?
 5. **Política de `Idempotency-Key` con cuerpo distinto (WS-2):** cuando llega la misma `Idempotency-Key` en `POST /api/donaciones` con un monto distinto, ¿preferís `409 Conflict` (alineado al resto de los conflictos del proyecto) o `422 Unprocessable Entity` (estándar IETF `draft-ietf-httpapi-idempotency-key-header`)?
+
+---
+
+## Fase 3 — Re-evaluación Final Post-Remediación (WS-0 a WS-11)
+
+- **Fecha de re-evaluación:** 2026-11-28
+- **Commit verificado en `main`:** `a8fb564` (PR #42 mergeado con los 12 checks de `CI` y `Security` en verde en GitHub Actions)
+
+### 1. Scorecard comparativo (Antes vs. Después)
+
+| Categoría | Antes (`6b006d1`) | Después (`a8fb564`) | Máx. | Delta | Evidencia verificada y motivo de la deducción remanente |
+|---|---:|---:|---:|---:|---|
+| 1. Arquitectura y diseño de dominio | 12.5 | **14.5** | 15 | +2.0 | **Logrado:** 18 reglas `ArchUnit` en build; transiciones internas idempotentes por `solicitudId` (`Animal.cambiarEstadoPorProceso`); cierres F1–F5 (`TareaControlesVencidos`, webhook + reconciliación MP, `ReconciliadorAdopciones`, reportes y eventos post-commit); espacio de nombres `ar.org.refugio.*` y módulo `common`; 27 ADRs. **-0.5:** `SolicitudService.conCambioDeAnimal` mantiene el `PUT` síncrono dentro de `tx.execute` como trade-off deliberado (ADR-06/17). |
+| 2. Calidad de código | 7.5 | **9.5** | 10 | +2.0 | **Logrado:** `maven-enforcer-plugin` (Java 21, Maven >= 3.9, `dependencyConvergence`), `Checkstyle` (`0` violaciones), `SpotBugs` (`effort=Max`, `0` bugs tras corregir 11 hallazgos reales incluidos CRLF y null-safety), `@DurationMin` en configuraciones y `Clock` en `DatosDemo`. **-0.5:** sobrecargas internas `listar(...)` conservadas por compatibilidad y sin formateador automático tipo Spotless. |
+| 3. Persistencia y datos | 7.5 | **9.5** | 10 | +2.0 | **Logrado:** migraciones Flyway `V1..V3` probadas en cada PR contra PostgreSQL 17 real (`FlywayMigrationIT`); `@BatchSize(50)` en observaciones y eventos + `default_batch_fetch_size: 50`; pool HikariCP explícito; `SolicitudConcurrenciaTest` (`1×200 + 1×409`); benchmark real sobre 10.000 filas en `docs/rendimiento.md` (**2.0x–5.4x**, **-90% a -94%** buffers). **-0.5:** conexión JDBC retenida durante el RTT interno en `conCambioDeAnimal` y `Perfil` sin `@Version`. |
+| 4. Seguridad | 8.5 | **11.5** | 12 | +3.0 | **Logrado:** `JwtTokenValidators` / `GatewayJwtValidators` perezosos con `clockSkew=30s`, allowlist `azp` y `aud` opcional; cliente `adopciones-pkce` (*PKCE S256*); hardening Gateway (CORS cerrado, headers, payload `413`, anti-CRLF); webhook HMAC-SHA256 en tiempo constante; matrices negativas IDOR/RBAC completas; `CodeQL`, `gitleaks`, `Trivy` (FS + 4 imágenes con 20 CVEs parcheadas + `.trivyignore` VEX) y `dependency-review` en verde; `SECURITY.md` + `docs/SEGURIDAD.md`. **-0.5:** *rate limiting* delegado al ingress productivo y `adopciones-cli` activo en perfil local. |
+| 5. Testing | 10.5 | **14.0** | 15 | +3.5 | **Logrado:** **237 tests en `verify` + 3 `FlywayMigrationIT` (PG17) + E2E de 8 contenedores (`prueba-humo.sh`)** ejecutados en CI; `common` en **100.0% líneas / 88.4% ramas** (gate `>= 85%`); cobertura agregada **90.1% líneas (1.840/2.043) / 72.1% ramas** (gate `>= 80%` en `*.model` y `*.service`); tags `@Tag("unit")` / `@ArchTag("unit")` / `@Tag("integration")` y tests de resiliencia deterministas con `CountDownLatch`. **-1.0:** sin contract testing (Pact) ni mutation testing (PIT); ramas de `gateway` en `50.0%`. |
+| 6. API y contratos | 5.0 | **7.5** | 8 | +2.5 | **Logrado:** `Idempotency-Key` opcional con hash SHA-256 por donante y `409` ante cambio de monto (ADR-18); `@Operation`/`@ApiResponse`/`@Schema` completos; exportación verificada `docs/openapi/*.json`; política de versionado en ADR-19. **-0.5:** paginación por cabecera `X-Total-Count` sin cursores/enlaces y `ErrorResponse` propio en lugar de RFC 9457. |
+| 7. Operabilidad y observabilidad | 4.5 | **7.5** | 8 | +3.0 | **Logrado:** `server.shutdown: graceful` (`20s`) + `stop_grace_period: 30s`; probes `liveness`/`readiness` (`show-details: never`); virtual threads en MVC; `ShedLock` JDBC en todas las tareas; métricas de negocio y gauge por estado cacheado en `/actuator/prometheus`; runbook `docs/OPERACION.md`. **-0.5:** sin trazas OpenTelemetry (`traceparent`) ni salida de logs en JSON estructurado. |
+| 8. DevEx, CI/CD y cadena de suministro | 6.5 | **11.5** | 12 | +5.0 | **Logrado:** demo reproducible sin credenciales (`docker-compose.demo.yml` + WireMock); Maven Wrapper `3.9.16` sin binarios; imágenes base fijadas con etiquetas OCI y reintentos anti-429; límites CPU/RAM en Compose; workflows `ci.yml` (`verify`, `integration-tests`, `e2e-demo`, `publish-release` GHCR) y `security.yml` + `dependabot.yml` filtrado. **-0.5:** sin SBOM ni firma Cosign/SLSA; `publish-release` pendiente de disparar al pushear tag `v1.0.0`. |
+| 9. Documentación y presentación | 6.5 | **9.5** | 10 | +3.0 | **Logrado:** cero contradicciones; eliminado `docs/AUDITORIA.md`; `.gitignore` limpio; `README.md` con resumen en inglés, cobertura/tiempos reales y trade-offs; `docs/ARQUITECTURA.md` (Mermaid), índice de 27 ADRs, `CONTRIBUTING.md`, `CHANGELOG.md` y plantillas de Issue/PR (`0` links rotos). **-0.5:** pendiente aplicar descripción/topics en portada de GitHub y publicar tag `v1.0.0`. |
+| **TOTAL** | **69.0** | **95.0** | **100** | **+26.0** | **Nivel alcanzado: Staff-curated Senior/Semi-Senior Portfolio Ready (`95.0/100`).** |
+
+---
+
+### 2. Estado de cierre de los 20 hallazgos (`H-01` a `H-20`)
+
+| Hallazgo | Severidad inicial | Estado final | Evidencia en `main` (`a8fb564`) |
+|---|---|---|---|
+| **H-01** (`Idempotency-Key` donaciones) | Bloqueante | **CERRADO** | `V2__idempotency_key.sql`, `DonacionService.crear`, `DonacionIdempotenciaTest`, `prueba-humo.sh`, ADR-18 |
+| **H-02** (Flyway en CI + demo WireMock) | Bloqueante | **CERRADO** | `docker-compose.demo.yml`, `infra/wiremock/mappings/`, jobs `integration-tests` y `e2e-demo` en `.github/workflows/ci.yml` |
+| **H-03** (Contradicciones en docs) | Bloqueante | **CERRADO** | `docs/PATRONES.md`, `docs/ADR.md`, `docs/CONTRATOS.md`, `README.md`, eliminación de `docs/AUDITORIA.md` |
+| **H-04** (Graceful shutdown + probes) | Alta | **CERRADO** | `application.yml` (×4), `docker-compose.yml` (`stop_grace_period: 30s`), `*MetricasTest`, `GatewayHardeningTest` |
+| **H-05** (Idempotencia interna + ADR-06) | Alta | **CERRADO** | `V2__solicitud_id_idempotencia.sql`, `AnimalIdempotenciaTest`, `ReconciliadorAdopciones`, ADR-20, ADR-21 |
+| **H-06** (Test concurrencia + `common` cov) | Alta | **CERRADO** | `SolicitudConcurrenciaTest` (`1×200 + 1×409`), `common` en **100.0%** líneas (`GlobalExceptionHandlerTest`, `SecurityCommonTest`) |
+| **H-07** (Seguridad en CI + concurrency) | Alta | **CERRADO** | `.github/workflows/security.yml` (`CodeQL`, `gitleaks`, `Trivy`, `dependency-review`), `concurrency` en `ci.yml` |
+| **H-08** (Gates estáticos y cobertura) | Alta | **CERRADO** | `mvnw`, Enforcer, Checkstyle, SpotBugs, ArchUnit (`18` reglas), `jacoco:check` (`>=80%`/`85%`), `coverage-report` |
+| **H-09** (Matriz negativa IDOR/RBAC) | Alta | **CERRADO** | `AdopcionesSecurityMatrixTest` (`historial`, `devolucion`), `AnimalesSecurityMatrixTest`, `DonacionesSecurityMatrixTest` |
+| **H-10** (`ShedLock` + métricas en tareas) | Alta | **CERRADO** | `V2__shedlock.sql`, `V3__shedlock.sql`, `ShedLockConfig`, `@SchedulerLock` y contadores en las 4 tareas programadas |
+| **H-11** (Hardening del Gateway) | Media | **CERRADO** | `GatewayHardeningProperties`, `SecurityConfig`, `MaxBodySizeFilter`, `GatewayHardeningTest` |
+| **H-12** (`azp`/`aud`/`clockSkew` JWT) | Media | **CERRADO** | `JwtTokenValidators`, `GatewayJwtValidators`, `JwtTokenValidatorsTest`, `GatewayJwtValidatorTest`, ADR-22 |
+| **H-13** (OpenAPI completo + export JSON) | Media | **CERRADO** | `docs/openapi/*.json`, `OpenApiExportTest`, perfil `-Pexport-openapi`, ADR-19 |
+| **H-14** (Brechas funcionales F1–F5) | Media | **CERRADO** | Controles vencidos (F1), webhook + reconciliación MP (F2), reconciliador ADR-06 (F3), reportes (F4), eventos (F5) |
+| **H-15** (Virtual threads + HikariCP) | Media | **CERRADO** | `spring.threads.virtual.enabled: true` y `spring.datasource.hikari.*` en los 3 servicios MVC |
+| **H-16** (Retry selectivo en GET) | Media | **CERRADO** | Resilience4j `Retry` en `GeorefClient` y `MercadoPagoClient.buscarPagoAprobado` (`crearCobro` sin retry), ADR-20 |
+| **H-17** (`EXPLAIN ANALYZE` + batch events) | Media | **CERRADO** | `docs/rendimiento.md` con mediciones reales sobre 10.000 filas en PG17; `@BatchSize(50)` en `Solicitud.eventos` |
+| **H-18** (Runbook y docs de gobernanza) | Media | **CERRADO** | `docs/OPERACION.md`, `docs/ARQUITECTURA.md`, `docs/SEGURIDAD.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `.github/*` |
+| **H-19** (Pulido validaciones/reloj/sleeps) | Baja | **CERRADO** | `@DurationMin`, `Clock` en `DatosDemo`, `CountDownLatch` + `esperarHalfOpen` en tests de resiliencia |
+| **H-20** (OCI labels, recursos y naming) | Baja | **CERRADO** | Dockerfiles fijados + OCI labels, `deploy.resources.limits` y renombrado integral a `ar.org.refugio` / `common` (WS-11) |
+
+---
+
+### 3. Checklist Definition of Done
+
+- [x] Contratos HTTP de `docs/CONTRATOS.md` preservados con evolución estrictamente aditiva.
+- [x] Cero Lombok y cero `@Value` dispersos, impuestos automáticamente por Checkstyle y ArchUnit.
+- [x] `./mvnw clean verify` y `-Pintegration-tests` en verde (`237` Surefire + `3` Testcontainers PG17 = `240` tests, `0` fallos).
+- [x] Cobertura agregada medida en **90.1% líneas** (`common` **100.0%**, `ms-animales` **93.3%**, `ms-adopciones` **90.6%**, `ms-donaciones` **86.3%**, `gateway` **82.1%**).
+- [x] Stack completo de 8 contenedores + Keycloak + PostgreSQL 17 + WireMock verificado E2E con `prueba-humo.sh` tanto localmente como en GitHub Actions (`3m 23s`).
+- [x] Escaneos de seguridad (`CodeQL`, `gitleaks`, `Trivy` FS + 4 imágenes Docker, `dependency-review`) todos en verde en GitHub Actions.
+- [x] Cero contradicciones documentales, cero enlaces rotos y cero rastros de plantilla académica en el código y la documentación operativa.
+
