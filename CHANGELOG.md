@@ -4,6 +4,8 @@ Todos los cambios relevantes de este proyecto se documentan en este archivo sigu
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-28
+
 ### Added
 - **API & Dominio:**
   - Encabezado opcional `Idempotency-Key` en `POST /api/donaciones` con hash SHA-256 por donante y respuesta `409 Conflict` ante discrepancia de monto (ADR-18).
