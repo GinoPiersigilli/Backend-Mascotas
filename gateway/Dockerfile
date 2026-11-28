@@ -21,7 +21,7 @@ RUN --mount=type=cache,target=/root/.m2 \
     mvn -B -q -pl gateway -am package -DskipTests
 
 # Etapa 2: runtime minimo JRE 21 fijado con usuario sin privilegios y metadatos OCI
-FROM eclipse-temurin:21.0.13.1_2-jre-noble
+FROM eclipse-temurin:24.0.2_12-jre-noble
 ARG IMAGE_VERSION=1.0.0
 ARG VCS_REF=dev
 LABEL org.opencontainers.image.title="gateway" \
